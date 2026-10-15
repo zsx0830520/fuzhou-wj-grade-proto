@@ -1,0 +1,25 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>直播监测 · 网监分级分类</title>
+  <link rel="stylesheet" href="../assets/vendor/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="../assets/app.css?v=33">
+</head>
+<body>
+  <div class="app" id="app"></div>
+  <script src="../assets/common.js?v=41"></script>
+  <script>
+    const view = qs("view") || "regular";
+    const src = {
+      regular: "../live-proto/index.html?v=5",
+      special: "../live-proto/pages/special.html?v=4",
+      products: "../live-proto/pages/products.html",
+    }[view] || "../live-proto/index.html";
+    document.getElementById("app").innerHTML = shellStart({ framed: true }) + `
+      <iframe class="proto-frame" id="live-frame" title="直播监测" src="${src}"></iframe>
+    ` + shellEnd();
+  </script>
+</body>
+</html>

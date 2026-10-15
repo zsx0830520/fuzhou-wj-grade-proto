@@ -1,0 +1,36 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>专项详情 · 网监分级分类</title>
+  <link rel="stylesheet" href="../assets/vendor/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="../assets/app.css?v=33">
+</head>
+<body>
+  <div class="app" id="app"></div>
+  <script src="../assets/common.js?v=41"></script>
+  <script>
+    const t = specials().find(x => x.id === qs("id"));
+    document.getElementById("app").innerHTML = shellStart() + (t ? `
+      <section class="card">
+        <h2>${t.name}</h2>
+        <p class="sub">${t.type === "主体" ? "业务子库：食品直播" : "按网址监测"} · ${t.range}</p>
+        <dl class="dl">
+          <dt>状态</dt><dd>${statusChip(t.status)}</dd>
+          <dt>对象整</dt><dd>${t.rooms}</dd>
+          <dt>线索</dt><dd>${t.clues}</dd>
+          <dt>发起科室</dt><dd>${t.owner}</dd>
+        </dl>
+        <div class="actions">
+          <a class="btn-ghost" href="${page("special.html")}">返回</a>
+          ${t.status === "已完成" ? `<span class="muted">已完成，不可删除、不可导入</span>` : `
+            <button class="btn-primary" onclick="toast('演示：导入结果')">导入结果</button>
+            <button class="btn-danger" onclick="if(confirm('仅发起科室可删。确认删除？'))toast('已删除')">删除</button>`}
+        </div>
+      </section>
+    ` : `<section class="card"><p class="empty">未找到该任务</p></section>`) + shellEnd();
+    document.getElementById("crumb").textContent = t ? "专项监测 / " + t.name : "专项监测";
+  </script>
+</body>
+</html>

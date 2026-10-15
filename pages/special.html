@@ -1,0 +1,144 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>专项监测 · 查询</title>
+  <link rel="stylesheet" href="../assets/vendor/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="../assets/app.css?v=33">
+</head>
+<body>
+  <div class="app" id="app"></div>
+  <script src="../assets/common.js?v=41"></script>
+  <script>
+    function opt(list, extra) {
+      return (extra || `<option value="">全部</option>`) + list.map((x) => `<option>${x}</option>`).join("");
+    }
+    function fld(id, label, html) {
+      return `<div class="flt-item"><label>${label}</label>${html}</div>`;
+    }
+    function qv(id) {
+      const el = document.getElementById(id);
+      return el ? (el.value || "").trim() : "";
+    }
+
+    document.getElementById("app").innerHTML = shellStart() + `
+      <section class="card">
+        <div class="flt-grid">
+          ${fld("q-name", "监测任务名称", `<input id="q-name" autocomplete="off">`)}
+          ${fld("q-type", "任务类型", `<select id="q-type">${opt(APPLY_TYPES)}</select>`)}
+          ${fld("q-deadline", "完成期限", `<input id="q-deadline" type="date">`)}
+          ${fld("q-org", "申请机构", `<select id="q-org">${opt(APPLY_ORGS, `<option value="">请选择</option>`)}</select>`)}
+          ${fld("q-done", "是否完成", `<select id="q-done"><option value="">全部</option><option>是</option><option>否</option></select>`)}
+        </div>
+        <div class="apply-toolbar">
+          <div class="ops">
+            <div class="flt-actions">
+              <button type="button" class="btn-ghost" onclick="clearQ()">${antIco("clear", "清空")}</button>
+              <button type="button" class="btn-primary" onclick="paint()">${antIco("search", "查询")}</button>
+            </div>
+          </div>
+          <aside class="clue-tip">根据申请机构控制查看权限，只能查看本级及以下。<br>导入结果仅开放给创建角色使用，不是该角色，不显示导入结果按钮</aside>
+        </div>
+        <div class="table-wrap"><table>
+          <thead><tr>
+            <th>序号</th><th>监测任务名称</th><th>任务类型</th><th>完成期限</th>
+            <th>申请机构</th><th>申请人</th><th>申请时间</th><th>是否完成</th>
+            <th class="tbl-ops">操作</th>
+          </tr></thead>
+          <tbody id="tbody"></tbody>
+        </table></div>
+      </section>
+    ` + shellEnd();
+    document.getElementById("crumb").textContent = "专项监测 / 查询";
+
+    function filtered() {
+      const name = qv("q-name");
+      const type = qv("q-type");
+      const deadline = qv("q-deadline");
+      const org = qv("q-org");
+      const done = qv("q-done");
+      return specialApplies().filter((t) => {
+        if (name && !(t.name || "").includes(name)) return false;
+        if (type && t.type !== type) return false;
+        if (deadline && t.deadline !== deadline) return false;
+        if (org && t.org !== org) return false;
+        if (done && t.done !== done) return false;
+        return true;
+      });
+    }
+    function paint() {
+      document.getElementById("tbody").innerHTML = filtered().map((t, i) => {
+        const showImport = t.done !== "是" && t.canImport !== false;
+        return `<tr>
+          <td>${i + 1}</td>
+          <td>${t.name}</td>
+          <td>${t.type}</td>
+          <td>${fmtDotDate(t.deadline)}</td>
+          <td>${t.org || "—"}</td>
+          <td>${t.applicant || "—"}</td>
+          <td>${fmtDotDate(t.applied)}</td>
+          <td>${t.done}</td>
+          <td class="tbl-ops">
+            <a href="javascript:void(0)" onclick="openQueryView('${t.id}')">查看</a>
+            ${showImport ? `<a href="${page("special-import.html")}?id=${t.id}">导入结果</a>` : ""}
+          </td>
+        </tr>`;
+      }).join("") || `<tr><td colspan="9" class="empty">暂无任务</td></tr>`;
+    }
+    function clearQ() {
+      ["q-name", "q-type", "q-deadline", "q-org", "q-done"].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.value = "";
+      });
+      paint();
+    }
+    function kvRow(k1, v1, k2, v2) {
+      return `<div class="kv">
+        <div class="k">${k1}</div><div class="v">${v1}</div>
+        <div class="k">${k2}</div><div class="v">${v2}</div>
+      </div>`;
+    }
+    function openQueryView(id) {
+      const t = specialApplies().find((x) => x.id === id);
+      if (!t) return;
+      const related = clues().filter((c) => c.task === t.name);
+      const rows = related.map((c, i) => `<tr>
+        <td>${i + 1}</td><td>${c.platName || "—"}</td><td>${c.shopName || "—"}</td>
+        <td>${c.subject || "—"}</td><td>${c.item || "—"}</td><td>${c.status || "—"}</td>
+      </tr>`).join("") || `<tr><td colspan="6" class="empty">暂无线索</td></tr>`;
+      openModal(`
+        <div class="modal adj handle-form">
+          <div class="adj-h">
+            <h3>查询 / 查看</h3>
+            <button type="button" class="icon-btn" onclick="closeModal()"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+          <div class="adj-body">
+            <div class="kv-form">
+              ${kvRow("监测任务名称", t.name, "任务类型", t.type)}
+              ${kvRow("完成期限", fmtDotDate(t.deadline), "申请机构", t.org || "—")}
+              ${kvRow("申请人", t.applicant || "—", "申请时间", fmtDotDate(t.applied))}
+              ${kvRow("是否完成", t.done, "子库标签", t.tag || "—")}
+              <div class="kv span">
+                <div class="k">监测需求描述</div>
+                <div class="v">${t.desc || "—"}</div>
+              </div>
+            </div>
+            <h4 class="sec-h" style="margin-top:16px">监测线索</h4>
+            <div class="table-wrap"><table>
+              <thead><tr><th>序号</th><th>电商平台名称</th><th>网店名称</th><th>主体名称</th><th>涉嫌违规类型</th><th>状态</th></tr></thead>
+              <tbody>${rows}</tbody>
+            </table></div>
+          </div>
+          <div class="adj-foot">
+            <button type="button" class="btn-ghost" onclick="closeModal()">返回</button>
+          </div>
+        </div>`);
+    }
+    window.paint = paint;
+    window.clearQ = clearQ;
+    window.openQueryView = openQueryView;
+    paint();
+  </script>
+</body>
+</html>

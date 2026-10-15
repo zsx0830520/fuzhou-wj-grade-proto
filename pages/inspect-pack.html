@@ -1,0 +1,185 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>任务详情 · 网监分级分类</title>
+  <link rel="stylesheet" href="../assets/vendor/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="../assets/app.css?v=33">
+</head>
+<body>
+  <div class="app" id="app"></div>
+  <script src="../assets/common.js?v=41"></script>
+  <script>
+    const p = packOf(qs("id"));
+    const CHECK_STATS = ["已检查", "未检查", "未指派", "无法检查"];
+    function rowsOf() {
+      return checks().filter((k) => k.packId === (p && p.id));
+    }
+    function v(id) {
+      const el = document.getElementById(id);
+      return el ? (el.value || "").trim() : "";
+    }
+    function fld(id, label, html) {
+      return `<div class="flt-item"><label>${label}</label>${html}</div>`;
+    }
+    function stationOpts(empty) {
+      return `<option value="">${empty || "全部"}</option>` + Object.keys(STATION_REGION).map((x) => `<option>${x}</option>`).join("");
+    }
+    function showSt(k) {
+      return k.status === "未派发" ? "未指派" : k.status;
+    }
+    function canChangeStation(latest, k) {
+      const st = showSt(k);
+      return latest.mine !== false && latest.status !== "已完成" && (st === "未检查" || st === "未指派");
+    }
+    function filteredRows() {
+      return rowsOf().filter((k) => {
+        if (v("q-shop") && !(k.shopName || k.target || "").includes(v("q-shop"))) return false;
+        if (v("q-url") && !(k.url || "").includes(v("q-url"))) return false;
+        if (v("q-name") && !(k.name || "").includes(v("q-name"))) return false;
+        if (v("q-credit") && !(k.credit || "").includes(v("q-credit"))) return false;
+        if (v("q-addr") && !(k.address || "").includes(v("q-addr"))) return false;
+        if (v("q-station") && k.station !== v("q-station")) return false;
+        if (v("q-st") && showSt(k) !== v("q-st")) return false;
+        return true;
+      });
+    }
+    function paintTable() {
+      const latest = packOf(p.id);
+      const rows = filteredRows();
+      document.getElementById("tbody").innerHTML = rows.map((k, i) => {
+        const ops = [`<a href="${page("inspect-task.html")}?id=${k.id}&from=pack">查看</a>`];
+        if (canChangeStation(latest, k)) {
+          ops.push(`<a href="javascript:void(0)" onclick="openStation('${k.id}')">修改管辖所</a>`);
+        }
+        return `<tr>
+          <td>${i + 1}</td>
+          <td>${k.platName || "—"}</td>
+          <td>${k.shopName || k.target || "—"}</td>
+          <td>${k.url || "—"}</td>
+          <td>${k.name || "—"}</td>
+          <td>${k.credit || "—"}</td>
+          <td>${k.address || "—"}</td>
+          <td>${k.station || "—"}</td>
+          <td>${k.grade || "—"}</td>
+          <td>${statusChip(showSt(k))}</td>
+          <td class="tbl-ops">${ops.join(" ")}</td>
+        </tr>`;
+      }).join("") || `<tr><td colspan="11" class="empty">暂无抽检主体</td></tr>`;
+    }
+    function paintBody() {
+      const latest = packOf(p.id);
+      document.getElementById("app").innerHTML = shellStart() + `
+        <section class="card">
+          <h2>任务详情</h2>
+          <h3 class="sec-h">任务信息</h3>
+          <div class="kv-form" style="margin-bottom:16px">
+            <div class="kv span">
+              <div class="k">任务名称</div><div class="v">${latest.name}</div>
+            </div>
+            <div class="kv">
+              <div class="k">任务类型</div><div class="v">${latest.type || "—"}</div>
+              <div class="k">任务时间</div><div class="v">${latest.time || "—"}</div>
+            </div>
+            <div class="kv span">
+              <div class="k">任务说明</div><div class="v">${latest.desc || latest.note || "—"}</div>
+            </div>
+            <div class="kv">
+              <div class="k">派发人</div><div class="v">${latest.owner || "—"}</div>
+              <div class="k">派发机构</div><div class="v">${latest.dispatchTo || "—"}</div>
+            </div>
+            <div class="kv">
+              <div class="k">派发时间</div><div class="v">${latest.dispatched || "—"}</div>
+              <div class="k">抽检 / 已完成</div><div class="v">${latest.total || rowsOf().length} / ${latest.done || 0}</div>
+            </div>
+            <div class="kv span">
+              <div class="k">状态</div><div class="v">${statusChip(latest.status)}${latest.mine === false ? `<span class="muted" style="margin-left:8px">下级任务仅可查看</span>` : ""}</div>
+            </div>
+          </div>
+          <h3 class="sec-h">抽检主体信息</h3>
+          <div class="flt-grid">
+            ${fld("q-shop", "网店名称", `<input id="q-shop" autocomplete="off">`)}
+            ${fld("q-url", "网址地址", `<input id="q-url" autocomplete="off">`)}
+            ${fld("q-name", "主体名称", `<input id="q-name" autocomplete="off">`)}
+            ${fld("q-credit", "统一社会信用代码", `<input id="q-credit" autocomplete="off">`)}
+            ${fld("q-addr", "登记地址", `<input id="q-addr" autocomplete="off">`)}
+            ${fld("q-station", "管辖所", `<select id="q-station">${stationOpts("全部")}</select>`)}
+            ${fld("q-st", "状态", `<select id="q-st"><option value="">全部</option>${CHECK_STATS.map((x) => `<option>${x}</option>`).join("")}</select>`)}
+          </div>
+          <div class="flt-actions">
+            <button type="button" class="btn-ghost" onclick="clearQ()">${antIco("clear", "清空")}</button>
+            <button type="button" class="btn-primary" onclick="paintTable()">${antIco("search", "查询")}</button>
+          </div>
+          <div class="table-wrap"><table class="wide-tbl insp-check-tbl">
+            <thead><tr>
+              <th>序号</th><th>所属平台</th><th>网店名称</th><th>网店地址</th><th>主体名称</th>
+              <th>统一社会信用代码</th><th>登记地址</th><th>管辖所</th><th>分级分类等级</th><th>状态</th><th>操作</th>
+            </tr></thead>
+            <tbody id="tbody"></tbody>
+          </table></div>
+          <div class="adj-foot" style="margin-top:16px">
+            <a class="btn-ghost" href="${page("inspect.html")}">关闭</a>
+          </div>
+        </section>
+      ` + shellEnd();
+      document.getElementById("crumb").textContent = "检查任务管理 / 任务派发 / 任务详情";
+      const pageEl = document.querySelector(".page");
+      if (pageEl) pageEl.classList.add("wide");
+      paintTable();
+    }
+    function clearQ() {
+      document.querySelectorAll(".flt-grid input, .flt-grid select").forEach((el) => { el.value = ""; });
+      paintTable();
+    }
+    function openStation(id) {
+      const k = checkOf(id);
+      if (!k) return;
+      const latest = packOf(p.id);
+      if (!canChangeStation(latest, k)) return toast("当前状态不可修改管辖所");
+      const sel = stationOpts("请选择").replace(`>${k.station}<`, ` selected>${k.station}<`);
+      openModal(`
+        <div class="modal">
+          <div class="adj-h" style="padding:0 0 12px;border:0">
+            <h3>修改管辖所</h3>
+            <button type="button" class="icon-btn" onclick="closeModal()"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+          <p class="sub">指定后由该管辖所负责本次检查。未派发的主体将变为未检查。</p>
+          <div class="field">
+            <label>管辖所</label>
+            <select id="d-org">${sel}</select>
+          </div>
+          <div class="actions" style="margin-top:16px;justify-content:flex-end">
+            <button type="button" class="btn-ghost" onclick="closeModal()">取消</button>
+            <button type="button" class="btn-primary" onclick="saveStation('${id}')">确定</button>
+          </div>
+        </div>`);
+    }
+    function saveStation(id) {
+      const org = v("d-org");
+      if (!org) return toast("请选择管辖所");
+      const k = checkOf(id);
+      if (!k) return;
+      const s = loadState();
+      s.checks = s.checks || {};
+      const nextStatus = (showSt(k) === "未指派" || k.status === "无法检查") ? "未检查" : k.status;
+      const flow = (k.flow || []).concat([{ op: "派发", org: "福建省市场监督管理局省处", who: "李监管", date: "2026.9.11" }]);
+      s.checks[id] = { ...k, station: org, status: nextStatus, flow };
+      saveState({ checks: s.checks });
+      closeModal();
+      toast("已指定由「" + org + "」检查");
+      paintTable();
+    }
+    window.paintTable = paintTable;
+    window.clearQ = clearQ;
+    window.openStation = openStation;
+    window.saveStation = saveStation;
+    if (!p) {
+      document.getElementById("app").innerHTML = shellStart() + `<section class="card"><p class="empty">未找到该任务</p></section>` + shellEnd();
+      document.getElementById("crumb").textContent = "检查任务管理 / 任务派发";
+    } else {
+      paintBody();
+    }
+  </script>
+</body>
+</html>

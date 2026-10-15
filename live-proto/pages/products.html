@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>商品监测结果 · 福州网监直播采集</title>
+  <link rel="stylesheet" href="../../assets/vendor/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="../assets/app.css">
+</head>
+<body>
+  <div class="app" id="app"></div>
+  <script src="../assets/common.js"></script>
+  <script>
+    document.getElementById("app").innerHTML = shellStart("products") + `
+      <section class="card">
+        <h2>商品监测结果</h2>
+        <p class="sub">常规与专项监测中识别到的带货商品均在此留存。点击名称或「查看」进入详情。</p>
+        <div class="toolbar">
+          <input class="search" id="kw" placeholder="搜索商品 / 直播间 / 主体" oninput="render()">
+          <select id="from" onchange="render()">
+            <option value="">全部来源</option>
+            <option>常规监测</option>
+            <option>专项监测</option>
+          </select>
+          <span class="muted" style="align-self:center">发现时间</span>
+          <input class="search" type="date" id="dateStart" onchange="render()" title="开始日期">
+          <span class="muted" style="align-self:center">至</span>
+          <input class="search" type="date" id="dateEnd" onchange="render()" title="结束日期">
+        </div>
+        <div class="table-wrap"><table>
+          <thead><tr>
+            <th></th>
+            <th>商品名称</th>
+            <th>售价</th>
+            <th>来源</th>
+            <th>直播间 / 主体</th>
+            <th>发现时间</th>
+            <th></th>
+          </tr></thead>
+          <tbody id="tbody"></tbody>
+        </table></div>
+      </section>
+    ` + shellEnd();
+    document.getElementById("crumb").textContent = "商品监测结果";
+
+    function render() {
+      const kw = (document.getElementById("kw").value || "").trim();
+      const from = document.getElementById("from").value;
+      const dateStart = document.getElementById("dateStart").value;
+      const dateEnd = document.getElementById("dateEnd").value;
+      const list = PRODUCTS.filter(p => {
+        const room = getRoom(p.roomId);
+        const day = (p.time || "").slice(0, 10);
+        if (from && p.from !== from) return false;
+        if (dateStart && day < dateStart) return false;
+        if (dateEnd && day > dateEnd) return false;
+        if (kw && ![p.name, room?.name, room?.subject].join("").includes(kw)) return false;
+        return true;
+      });
+      document.getElementById("tbody").innerHTML = list.map(p => {
+        const room = getRoom(p.roomId);
+        return `<tr>
+          <td><img class="thumb" src="${p.img}" alt=""></td>
+          <td><a class="linkish" href="product-detail.html?id=${p.id}">${p.name}</a><div class="muted">${p.id}</div></td>
+          <td>${p.price}</td>
+          <td><span class="chip ${p.from === "专项监测" ? "chip-c" : "chip-a"}">${p.from}</span><div class="muted">${p.task}</div></td>
+          <td>${room?.name || ""}<div class="muted">${room?.subject || ""}</div></td>
+          <td>${p.time}</td>
+          <td><a class="btn-ghost btn" href="product-detail.html?id=${p.id}">查看</a></td>
+        </tr>`;
+      }).join("") || '<tr><td colspan="7" class="empty">没有符合条件的商品</td></tr>';
+    }
+    render();
+  </script>
+</body>
+</html>

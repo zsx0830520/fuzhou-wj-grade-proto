@@ -1,0 +1,46 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>结果详情 · 网监分级分类</title>
+  <link rel="stylesheet" href="../assets/vendor/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="../assets/app.css?v=33">
+</head>
+<body>
+  <div class="app" id="app"></div>
+  <script src="../assets/common.js?v=41"></script>
+  <script>
+    const r = resultOf(qs("id"));
+    document.getElementById("app").innerHTML = shellStart() + (r ? `
+      <section class="card">
+        <h2>${r.name}</h2>
+        <p class="sub">${typeName(r.type)} · 当前 ${r.level} 线 · ${r.mode}。人工调级成功后不再参与系统评定，除非改回自动评定。</p>
+        <dl class="dl">
+          <dt>统一社会信用代码</dt><dd>${r.credit}</dd>
+          ${r.company ? `<dt>公司名称</dt><dd>${r.company}</dd>` : ""}
+          ${r.domain ? `<dt>域名链接</dt><dd>${r.domain}</dd>` : ""}
+          ${r.shop ? `<dt>关联店铺</dt><dd>${r.shop}</dd>` : ""}
+          ${r.livePlat ? `<dt>主要直播平台</dt><dd>${r.livePlat}</dd>` : ""}
+          <dt>辖区 / 监管所</dt><dd>${r.area} · ${r.station}</dd>
+          <dt>系统评定</dt><dd>${levelChip(r.sysLevel)}：{r.score} 分）</dd>
+          <dt>当前等级</dt><dd>${levelChip(r.level)} ${r.pending ? statusChip("调级中") : ""}</dd>
+          <dt>是否人工调级</dt><dd>${manualFlag(r)}</dd>
+          <dt>最近评容</dt><dd>${r.updated}</dd>
+        </dl>
+        <h2 class="sec-h block-gap">评定详情</h2>
+        <div id="judge-view-root"></div>
+        <div class="actions">
+          <a class="btn-ghost" href="${page("index.html")}?type=${r.type}">返回列表</a>
+          <button class="btn-primary" onclick="openAdjustById('${r.id}')">申请调级</button>
+        </div>
+      </section>
+    ` : `<section class="card"><p class="empty">未找到该主体</p></section>`) + shellEnd();
+    document.getElementById("crumb").textContent = r ? "分级分类结果 / " + r.name : "分级分类结果";
+    if (r) {
+      window.__judgeViewId = r.id;
+      paintJudgeView("current");
+    }
+  </script>
+</body>
+</html>

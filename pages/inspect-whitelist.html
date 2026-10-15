@@ -1,0 +1,118 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>抽查白名单 · 网监分级分类</title>
+  <link rel="stylesheet" href="../assets/vendor/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="../assets/app.css?v=36">
+</head>
+<body>
+  <div class="app" id="app"></div>
+  <script src="../assets/common.js?v=41"></script>
+  <script>
+    function v(id) {
+      const el = document.getElementById(id);
+      return el ? (el.value || "").trim() : "";
+    }
+    function fld(id, label, html) {
+      return `<div class="flt-item"><label>${label}</label>${html}</div>`;
+    }
+    function opt(list) {
+      return `<option value="">全部</option>` + list.map((x) => `<option>${x}</option>`).join("");
+    }
+    const STATIONS = [...new Set(whitelistActive().map((w) => w.station).filter(Boolean))];
+    const PACKS_W = [...new Set(whitelistActive().map((w) => w.packName).filter(Boolean))];
+
+    document.getElementById("app").innerHTML = shellStart() + `
+      <section class="card">
+        <h2>抽查白名单</h2>
+        <p class="sub">被抽中的网店自动入册，半年内不再参与抽取。到期按抽中当日自动移出；也可手动删除后立即恢复可抽。同一企业的不同网店分别计算。</p>
+        <div class="flt-grid">
+          ${fld("q-shop", "网店名称", `<input id="q-shop" autocomplete="off">`)}
+          ${fld("q-path", "网店地址", `<input id="q-path" autocomplete="off">`)}
+          ${fld("q-name", "主体名称", `<input id="q-name" autocomplete="off">`)}
+          ${fld("q-credit", "统一社会信用代码", `<input id="q-credit" autocomplete="off">`)}
+          ${fld("q-station", "管辖所", `<select id="q-station">${opt(STATIONS)}</select>`)}
+          ${fld("q-pack", "抽中任务", `<select id="q-pack">${opt(PACKS_W)}</select>`)}
+          <div class="flt-item">
+            <label>移出白名单日期</label>
+            <div class="date-range">
+              <input id="q-from" type="date">
+              <input id="q-to" type="date">
+            </div>
+          </div>
+        </div>
+        <div class="flt-actions">
+          <button type="button" class="btn-ghost" onclick="clearQ()">${antIco("clear", "清空")}</button>
+          <button type="button" class="btn-primary" onclick="paint()">${antIco("search", "查询")}</button>
+        </div>
+        <div class="table-wrap"><table class="wide-tbl insp-check-tbl">
+          <thead><tr>
+            <th>序号</th><th>所属平台</th><th>网店名称</th><th>网店地址</th>
+            <th>主体名称</th><th>统一社会信用代码</th><th>登记地址</th><th>管辖所</th>
+            <th>抽中任务</th><th>进入日期</th><th>移出日期</th><th>操作</th>
+          </tr></thead>
+          <tbody id="tbody"></tbody>
+        </table></div>
+      </section>
+    ` + shellEnd();
+    document.getElementById("crumb").textContent = "检查任务管理 / 抽查白名单";
+    const pageEl = document.querySelector(".page");
+    if (pageEl) pageEl.classList.add("wide");
+
+    function filtered() {
+      return whitelistActive().filter((w) => {
+        if (v("q-shop") && !(w.shopName || "").includes(v("q-shop"))) return false;
+        if (v("q-path") && !(w.path || "").includes(v("q-path"))) return false;
+        if (v("q-name") && !(w.name || "").includes(v("q-name"))) return false;
+        if (v("q-credit") && !(w.credit || "").includes(v("q-credit"))) return false;
+        if (v("q-station") && w.station !== v("q-station")) return false;
+        if (v("q-pack") && w.packName !== v("q-pack")) return false;
+        const exp = dayKey(w.expire);
+        if (v("q-from") && exp < v("q-from")) return false;
+        if (v("q-to") && exp > v("q-to")) return false;
+        return true;
+      });
+    }
+    function paint() {
+      const rows = filtered();
+      document.getElementById("tbody").innerHTML = rows.map((w, i) => {
+        const view = w.subjectId
+          ? `<a href="javascript:void(0)" onclick="openSubjectView('${w.subjectId}')">查看</a>`
+          : "";
+        return `<tr>
+          <td>${i + 1}</td>
+          <td>${w.platName || "—"}</td>
+          <td>${w.shopName || "—"}</td>
+          <td class="wrap">${w.path || "—"}</td>
+          <td>${w.name || "—"}</td>
+          <td>${w.credit || "—"}</td>
+          <td class="wrap">${w.address || "—"}</td>
+          <td>${w.station || "—"}</td>
+          <td>${w.packName || "—"}</td>
+          <td>${w.enter || "—"}</td>
+          <td>${w.expire || "—"}</td>
+          <td class="tbl-ops">${view} <a href="javascript:void(0)" onclick="delOne('${w.id}')">删除</a></td>
+        </tr>`;
+      }).join("") || `<tr><td colspan="12" class="empty">暂无在册网店</td></tr>`;
+    }
+    function clearQ() {
+      document.querySelectorAll(".flt-grid input, .flt-grid select").forEach((el) => { el.value = ""; });
+      paint();
+    }
+    function delOne(id) {
+      const w = whitelistAll().find((x) => x.id === id);
+      if (!w) return;
+      if (!confirm("删除后该网店将立即恢复可抽，确认删除？")) return;
+      patchRow("whitelist", id, { status: "已删除" });
+      toast("已移出白名单");
+      paint();
+    }
+    window.paint = paint;
+    window.clearQ = clearQ;
+    window.delOne = delOne;
+    paint();
+  </script>
+</body>
+</html>

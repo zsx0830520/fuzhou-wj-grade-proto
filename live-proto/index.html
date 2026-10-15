@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>常规监测 · 福州网监直播采集</title>
+  <link rel="stylesheet" href="../assets/vendor/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="assets/app.css?v=2">
+</head>
+<body>
+  <div class="app" id="app"></div>
+  <script src="assets/common.js"></script>
+  <script>
+    document.getElementById("app").innerHTML = shellStart("regular") + `
+      <div id="storage-slot"></div>
+      <section class="card" style="margin-bottom:12px">
+        <h2>下月抽池比例</h2>
+        <p class="sub">按直播间 ABCD 等级配置抽取比例，保存后仅对下一自然月抽池生效，不影响已开始的监测月。</p>
+        <div class="ratios" id="ratios"></div>
+        <div class="actions">
+          <button class="btn-primary" onclick="saveRatios()">保存比例</button>
+          <span class="muted" id="ratio-hint"></span>
+        </div>
+      </section>
+      <section class="card">
+        <h2>月度监测</h2>
+        <p class="sub">各月概况。进入详情查看该月监测主体；列表中的抽取比例为该月实际抽池所用比例。</p>
+        <div class="table-wrap"><table>
+          <thead><tr>
+            <th>监测月份</th>
+            <th>监测主体数</th>
+            <th>留存切片</th>
+            <th>已自动清理</th>
+            <th>线索</th>
+            <th>已处理线索</th>
+            <th>该月抽池比例</th>
+            <th></th>
+          </tr></thead>
+          <tbody id="tbody"></tbody>
+        </table></div>
+      </section>
+    ` + shellEnd();
+    document.getElementById("crumb").textContent = "常规监测";
+    document.getElementById("storage-slot").innerHTML = storageBar();
+
+    const LEVEL_POOL = { A: 300, B: 1280, C: 2560, D: 640 };
+    function paintRatios() {
+      const r = loadState().ratios;
+      document.getElementById("ratios").innerHTML = ["A","B","C","D"].map(k => `
+        <div class="ratio">
+          <label><span>${k}级抽取</span><em>共有${LEVEL_POOL[k]}户主体</em></label>
+          <div class="with-unit">
+            <input type="number" min="0" max="100" id="ratio-${k}" value="${r[k]}">
+            <span class="unit">%</span>
+          </div>
+        </div>`).join("");
+      document.getElementById("ratio-hint").textContent = `将用于下月抽池：A ${r.A}% · B ${r.B}% · C ${r.C}% · D ${r.D}%`;
+    }
+    function saveRatios() {
+      const ratios = {};
+      ["A","B","C","D"].forEach(k => ratios[k] = Number(document.getElementById("ratio-" + k).value || 0));
+      saveState({ ratios });
+      paintRatios();
+      toast("已保存，将于下月抽池时生效");
+    }
+    function renderMonths() {
+      document.getElementById("tbody").innerHTML = monthKeys().slice().reverse().map(ym => {
+        const c = MONTH_CAMPAIGNS[ym];
+        const r = c.ratios;
+        const handled = roomsForMonth(ym).reduce((n, row) => n + handledClueCountForRow(row), 0);
+        return `<tr>
+          <td><a class="linkish" href="${page("regular-detail.html")}?month=${ym}">${c.label}</a></td>
+          <td>${c.stats.pool}</td>
+          <td>${c.stats.clips}</td>
+          <td>${c.stats.cleared}</td>
+          <td>${c.stats.clues ? `<span class="chip chip-d">${c.stats.clues}</span>` : "—"}</td>
+          <td>${handled || "—"}</td>
+          <td class="muted">A ${r.A}% · B ${r.B}% · C ${r.C}% · D ${r.D}%</td>
+          <td><a class="btn-ghost btn" href="${page("regular-detail.html")}?month=${ym}">查看详情</a></td>
+        </tr>`;
+      }).join("");
+    }
+    paintRatios();
+    renderMonths();
+  </script>
+</body>
+</html>

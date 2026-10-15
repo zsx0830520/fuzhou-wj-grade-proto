@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>专项任务详情 · 福州网监直播采集</title>
+  <link rel="stylesheet" href="../../assets/vendor/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="../assets/app.css">
+</head>
+<body>
+  <div class="app" id="app"></div>
+  <script src="../assets/common.js"></script>
+  <script>
+    const task = getTasks().find(t => t.id === qs("id")) || getTasks()[0];
+    const rooms = task.roomIds.map(getRoom).filter(Boolean);
+    const clips = getVisibleClips().filter(c => task.roomIds.includes(c.roomId));
+    const clues = getCluesMerged().filter(c => task.roomIds.includes(c.roomId));
+
+    document.getElementById("app").innerHTML = shellStart("special") + `
+      <p class="muted" style="margin:0 0 12px"><a class="linkish" href="special.html">专项监测</a> / ${task.name}</p>
+      <section class="card">
+        <h2>${task.name}</h2>
+        <p class="sub">${task.note || "定向监测任务"}</p>
+        <div class="stats">
+          <div class="stat"><b>${task.start}<small style="font-size:12px"> 至 ${task.end}</small></b><span>监测日期</span></div>
+          <div class="stat"><b>每 ${task.freq} 小时</b><span>进入直播间频率</span></div>
+          <div class="stat"><b>${rooms.length}</b><span>挂接直播间</span></div>
+          <div class="stat"><b>${clues.length}</b><span>相关线索</span></div>
+        </div>
+      </section>
+      <section class="block card">
+        <h2>挂接直播间</h2>
+        <div class="table-wrap" style="margin-top:12px"><table>
+          <thead><tr><th>直播间</th><th>平台</th><th>主体</th><th>等级</th><th>留存切片</th><th>线索</th><th></th></tr></thead>
+          <tbody>${rooms.map(r => `
+            <tr>
+              <td><a class="linkish" href="room-detail.html?id=${r.id}&from=special&task=${task.id}">${r.name}</a></td>
+              <td>${r.platform}</td><td>${r.subject}</td><td>${levelChip(r.level)}</td>
+              <td>${clips.filter(c => c.roomId === r.id).length}</td>
+              <td>${clues.filter(c => c.roomId === r.id).length || "—"}</td>
+              <td><a class="btn-ghost btn" href="room-detail.html?id=${r.id}&from=special&task=${task.id}">详情</a></td>
+            </tr>`).join("")}</tbody>
+        </table></div>
+      </section>
+      <section class="block card">
+        <h2>监测切片</h2>
+        <p class="sub">仅留存发现线索的切片，商品识别不保留切片。可播放或手动删除。</p>
+        <div class="clips">${clips.map(c => clipCard(c)).join("") || '<div class="empty">暂无留存切片</div>'}</div>
+      </section>
+      <section class="block card">
+        <h2>违规线索</h2>
+        <div class="table-wrap" style="margin-top:12px"><table>
+          <thead><tr><th>编号</th><th>直播间</th><th>类型</th><th>发现时间</th><th>状态</th><th></th></tr></thead>
+          <tbody>${clues.map(c => `
+            <tr>
+              <td>${c.id}</td>
+              <td>${getRoom(c.roomId)?.name || ""}</td>
+              <td>${c.type}</td>
+              <td>${c.time}</td>
+              <td>${clueStatusChip(c)}</td>
+              <td>${clueOpsHtml(c, `<a class="btn-ghost btn" href="clue-detail.html?id=${c.id}">查看</a>`)}</td>
+            </tr>`).join("") || '<tr><td colspan="6" class="empty">暂无线索</td></tr>'}</tbody>
+        </table></div>
+      </section>
+    ` + shellEnd();
+    document.getElementById("crumb").textContent = "专项任务详情";
+
+    function clipCard(c) {
+      const room = getRoom(c.roomId);
+      return `<article class="clip">
+        <img src="${c.cover}" alt="">
+        <div class="bd">
+          <h4>${c.id}</h4>
+          <div class="muted">${room?.name || ""} · ${c.start}</div>
+          <div class="clip-ops">
+            <button class="btn-primary" onclick="openPlayer('${c.id}')">播放</button>
+            <button class="btn-danger" onclick="deleteClip('${c.id}')">删除</button>
+          </div>
+        </div>
+      </article>`;
+    }
+  </script>
+</body>
+</html>

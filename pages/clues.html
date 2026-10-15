@@ -1,0 +1,441 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>线索 · 网监分级分类</title>
+  <link rel="stylesheet" href="../assets/vendor/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="../assets/app.css?v=33">
+</head>
+<body>
+  <div class="app" id="app"></div>
+  <script src="../assets/common.js?v=41"></script>
+  <script>
+    let view = qs("view") || "todo";
+    if (view === "handle" || view === "dispatch") view = "todo";
+    const meta = {
+      query: { title: "线索查询", crumb: "线索查询" },
+      todo: { title: "待处理", crumb: "线索处理 / 待处理" },
+      done: { title: "已处理", crumb: "线索处理 / 已处理" },
+      copy: { title: "线索抄送查询", crumb: "线索抄送查询" },
+    }[view];
+    const isQuery = view === "query";
+    const isTodo = view === "todo";
+    const isDone = view === "done";
+    const isWide = isQuery || isTodo || isDone;
+
+    function opt(list, extra) {
+      return (extra || `<option value="">全部</option>`) + list.map((x) => `<option>${x}</option>`).join("");
+    }
+    function fld(id, label, html) {
+      return `<div class="flt-item"><label>${label}</label>${html}</div>`;
+    }
+    function violateOf(c) { return c.violateType || c.item || ""; }
+    function dispatchOf(c) { return c.dispatchUnit || c.handleUnit || ""; }
+
+    const Q_SUBJECT_TYPES = ["企业", "个体工商户", "平台内经营者"];
+    const Q_GOODS_CATS = ["保健品", "食品", "化妆品", "生活服务"];
+    const Q_ITEMS = [...new Set(clues().map((c) => violateOf(c)).filter(Boolean))];
+    const Q_STATUSES = ["待处置", "处置中", "已办结"];
+    const Q_CASE_RESULTS = ["警告、通报批评", "罚款", "没收违法所得", "没收非法财物", "其他行政处罚"];
+    const Q_TASKS = [...new Set(clues().map((c) => c.task).filter((t) => t && t !== "—"))];
+    const Q_UNITS = ["福建省市场监督管理局", "福州市市场监督管理局", "厦门市市场监督管理局"];
+    const unitOpts = `<option value="">全部</option>` + Q_UNITS.map((x) => `<option>${x}</option>`).join("");
+
+    const queryHtml = `
+        <div class="flt-grid">
+          ${fld("q-plat", "电商平台名称", `<input id="q-plat" autocomplete="off">`)}
+          ${fld("q-shop", "网店名称", `<input id="q-shop" autocomplete="off">`)}
+          ${fld("q-shopurl", "网店链接", `<input id="q-shopurl" autocomplete="off">`)}
+          ${fld("q-stype", "主体类型", `<select id="q-stype">${opt(Q_SUBJECT_TYPES)}</select>`)}
+          ${fld("q-credit", "统一社会信用代码", `<input id="q-credit" autocomplete="off">`)}
+          ${fld("q-goods", "商品名称", `<input id="q-goods" autocomplete="off">`)}
+          ${fld("q-gcat", "商品分类", `<select id="q-gcat">${opt(Q_GOODS_CATS)}</select>`)}
+          ${fld("q-gurl", "商品链接", `<input id="q-gurl" autocomplete="off">`)}
+          <div class="flt-item">
+            <label>监测日期</label>
+            <div class="date-range">
+              <input id="q-from" type="date">
+              <input id="q-to" type="date">
+            </div>
+          </div>
+          ${fld("q-item", "涉嫌违规类型", `<select id="q-item">${opt(Q_ITEMS)}</select>`)}
+          ${fld("q-st", "状态", `<select id="q-st">${opt(Q_STATUSES)}</select>`)}
+          ${fld("q-copy", "是否抄送", `<select id="q-copy"><option value="">全部</option><option value="是">是</option><option value="否">否</option></select>`)}
+          ${fld("q-case", "案件办理结果", `<select id="q-case">${opt(Q_CASE_RESULTS)}</select>`)}
+          ${fld("q-task", "监测任务名称", `<select id="q-task">${opt(Q_TASKS)}</select>`)}
+          ${fld("q-unit", "处置单位", `<select id="q-unit">${unitOpts}</select>`)}
+        </div>
+        <div class="flt-actions">
+          <button type="button" class="btn-ghost" onclick="exportClue()">导出</button>
+          <button type="button" class="btn-ghost" onclick="clearQ()">${antIco("clear", "清空")}</button>
+          <button type="button" class="btn-primary" onclick="paint()">${antIco("search", "查询")}</button>
+        </div>
+        <div class="table-wrap"><table class="clue-q-tbl">
+          <thead><tr>
+            <th>序号</th><th>电商平台名称</th><th>网店名称</th><th>网店链接</th><th>主体类型</th>
+            <th>主体名称</th><th>统一社会信用代码</th><th>商品名称</th><th>商品分类</th>
+            <th>商品链接</th><th>监测日期</th><th>涉嫌违规类型</th><th>状态</th>
+            <th>线索处置时限</th><th>操作</th>
+          </tr></thead>
+          <tbody id="tbody"></tbody>
+        </table></div>`;
+
+    const todoHtml = `
+        <div class="flt-grid">
+          ${fld("q-plat", "电商平台名称", `<input id="q-plat" autocomplete="off">`)}
+          ${fld("q-shop", "网店名称", `<input id="q-shop" autocomplete="off">`)}
+          ${fld("q-shopurl", "网店链接", `<input id="q-shopurl" autocomplete="off">`)}
+          ${fld("q-stype", "主体类型", `<select id="q-stype">${opt(Q_SUBJECT_TYPES)}</select>`)}
+          <div class="flt-item">
+            <label>监测日期</label>
+            <div class="date-range">
+              <input id="q-from" type="date">
+              <input id="q-to" type="date">
+            </div>
+          </div>
+          ${fld("q-dunit", "线索派发单位", `<select id="q-dunit">${unitOpts}</select>`)}
+          ${fld("q-goods", "商品名称", `<input id="q-goods" autocomplete="off">`)}
+          ${fld("q-credit", "统一社会信用代码", `<input id="q-credit" autocomplete="off">`)}
+          ${fld("q-item", "涉嫌违规类型", `<select id="q-item">${opt(Q_ITEMS)}</select>`)}
+          ${fld("q-task", "监测任务名称", `<select id="q-task">${opt(Q_TASKS)}</select>`)}
+          ${fld("q-unit", "线索处置单位", `<select id="q-unit">${unitOpts}</select>`)}
+        </div>
+        <div class="clue-todo-bar">
+          <div class="flt-actions">
+            <button type="button" class="btn-primary" onclick="openClueAdd()">${antIco("plus", "线索新增")}</button>
+            <button type="button" class="btn-primary" onclick="openClueBatchAdd()">批量新增</button>
+            <button type="button" class="btn-danger" onclick="deletePicked(false)">${antIco("delete", "删除")}</button>
+            <button type="button" class="btn-danger" onclick="deletePicked(true)">批量删除</button>
+            <button type="button" class="btn-ghost" onclick="clearQ()">${antIco("clear", "清空")}</button>
+            <button type="button" class="btn-primary" onclick="paint()">${antIco("search", "查询")}</button>
+          </div>
+          <aside class="clue-tip">自派发之日起，0–25 个工作日未处置为正常，25–30 个工作日为临期，超过 30 个工作日为超期。做出处置后停止更新时限。</aside>
+        </div>
+        <div class="table-wrap"><table class="clue-todo-tbl">
+          <thead><tr>
+            <th class="check"><input type="checkbox" onchange="toggleAllClues(this)"></th>
+            <th>序号</th><th>电商平台名称</th><th>网店名称</th><th>网店链接</th>
+            <th>主体名称</th><th>统一社会信用代码</th><th>商品名称</th><th>商品链接</th>
+            <th>监测日期</th><th>涉嫌违规类型</th><th>线索派发单位</th><th>线索处置时限</th><th class="tbl-ops">操作</th>
+          </tr></thead>
+          <tbody id="tbody"></tbody>
+        </table></div>`;
+
+    const doneHtml = `
+        <div class="flt-grid">
+          ${fld("q-plat", "电商平台名称", `<input id="q-plat" autocomplete="off">`)}
+          ${fld("q-shop", "网店名称", `<input id="q-shop" autocomplete="off">`)}
+          ${fld("q-shopurl", "网店链接", `<input id="q-shopurl" autocomplete="off">`)}
+          ${fld("q-stype", "主体类型", `<select id="q-stype">${opt(Q_SUBJECT_TYPES)}</select>`)}
+          ${fld("q-credit", "统一社会信用代码", `<input id="q-credit" autocomplete="off">`)}
+          ${fld("q-goods", "商品名称", `<input id="q-goods" autocomplete="off">`)}
+          ${fld("q-gcat", "商品分类", `<select id="q-gcat">${opt(Q_GOODS_CATS)}</select>`)}
+          ${fld("q-gurl", "商品链接", `<input id="q-gurl" autocomplete="off">`)}
+          <div class="flt-item">
+            <label>监测日期</label>
+            <div class="date-range">
+              <input id="q-from" type="date">
+              <input id="q-to" type="date">
+            </div>
+          </div>
+          ${fld("q-item", "涉嫌违规类型", `<select id="q-item">${opt(Q_ITEMS)}</select>`)}
+          ${fld("q-st", "状态", `<select id="q-st">${opt(["已办结", "已查阅"])}</select>`)}
+          ${fld("q-copy", "是否抄送", `<select id="q-copy"><option value="">全部</option><option value="是">是</option><option value="否">否</option></select>`)}
+          ${fld("q-task", "监测任务名称", `<select id="q-task">${opt(Q_TASKS)}</select>`)}
+        </div>
+        <div class="flt-actions">
+          <button type="button" class="btn-ghost" onclick="clearQ()">${antIco("clear", "清空")}</button>
+          <button type="button" class="btn-primary" onclick="paint()">${antIco("search", "查询")}</button>
+        </div>
+        <div class="table-wrap"><table class="clue-done-tbl">
+          <thead><tr>
+            <th>序号</th><th>电商平台名称</th><th>网店名称</th><th>网店链接</th><th>主体类型</th>
+            <th>主体名称</th><th>统一社会信用代码</th><th>商品名称</th><th>商品分类</th>
+            <th>商品链接</th><th>监测日期</th><th>涉嫌违规类型</th><th>操作</th>
+          </tr></thead>
+          <tbody id="tbody"></tbody>
+        </table></div>`;
+
+    const otherHtml = `
+        <p class="sub">仅展示抄送至本部门的线索。</p>
+        <div class="toolbar">
+          <input class="search" id="q" placeholder="主体 / 违规项">
+          <select id="src"><option value="">全部来源</option><option>专项监测</option><option>消费者</option><option>抄送</option></select>
+          <select id="st"><option value="">全部状态</option><option>待处置</option><option>处置中</option><option>已查阅</option><option>已办结</option></select>
+          <button class="btn-primary" onclick="paint()">${antIco("search", "查询")}</button>
+        </div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>来源</th><th>主体</th><th>违规项</th><th>辖区</th><th>状态</th><th>发现时间</th><th></th></tr></thead>
+          <tbody id="tbody"></tbody>
+        </table></div>`;
+
+    const bodyHtml = isQuery ? queryHtml : isTodo ? todoHtml : isDone ? doneHtml : otherHtml;
+    document.getElementById("app").innerHTML = shellStart() + `
+      <section class="card">
+        <h2>${meta.title}</h2>
+        ${bodyHtml}
+      </section>
+    ` + shellEnd();
+    document.getElementById("crumb").textContent = "违法违规线索 / " + meta.crumb;
+    const pageEl = document.querySelector(".page");
+    if (isWide && pageEl) pageEl.classList.add("wide");
+
+    function v(id) {
+      const el = document.getElementById(id);
+      return el ? (el.value || "").trim() : "";
+    }
+    function matchCommon(c) {
+      return (!v("q-plat") || (c.platName || "").includes(v("q-plat")))
+        && (!v("q-shop") || (c.shopName || "").includes(v("q-shop")))
+        && (!v("q-shopurl") || (c.shopUrl || "").includes(v("q-shopurl")))
+        && (!v("q-stype") || c.subjectType === v("q-stype"))
+        && (!v("q-credit") || (c.credit || "").includes(v("q-credit")))
+        && (!v("q-goods") || (c.goodsName || "").includes(v("q-goods")))
+        && (!v("q-gcat") || c.goodsCat === v("q-gcat"))
+        && (!v("q-gurl") || (c.goodsUrl || "").includes(v("q-gurl")))
+        && (!v("q-from") || (c.monitorDate || "") >= v("q-from"))
+        && (!v("q-to") || (c.monitorDate || "") <= v("q-to"))
+        && (!v("q-item") || violateOf(c) === v("q-item"))
+        && (!v("q-st") || c.status === v("q-st"))
+        && (!v("q-copy") || (c.copied ? "是" : "否") === v("q-copy"))
+        && (!v("q-case") || c.caseResult === v("q-case"))
+        && (!v("q-task") || c.task === v("q-task"))
+        && (!v("q-unit") || c.handleUnit === v("q-unit"))
+        && (!v("q-dunit") || dispatchOf(c) === v("q-dunit"));
+    }
+    function todoOps(c) {
+      if (c.status === "处置中" && c.disposeType === "立案") {
+        return `<a href="javascript:void(0)" onclick="openClueQueryView('${c.id}')">查看</a><a href="javascript:void(0)" onclick="openCase('${c.id}')">立案录入</a>`;
+      }
+      return `<a href="javascript:void(0)" onclick="openClueQueryView('${c.id}')">查看</a><a href="javascript:void(0)" onclick="openDispose('${c.id}')">办理</a><a href="javascript:void(0)" onclick="returnClue('${c.id}')">退回</a><a href="javascript:void(0)" onclick="openDispatch('${c.id}')">派发</a>`;
+    }
+    function ops(c) {
+      if (isQuery || isDone) return `<a href="javascript:void(0)" onclick="openClueQueryView('${c.id}')">查看</a>`;
+      if (view === "copy") return `<a href="${page("clue-detail.html")}?id=${c.id}&from=${view}">查看</a>`;
+      return todoOps(c);
+    }
+    function paint() {
+      let rows = clues();
+      if (isQuery || isTodo || isDone) {
+        rows = rows.filter(matchCommon);
+        if (isTodo) rows = rows.filter((c) => c.status === "待处置" || c.status === "处置中");
+        if (isDone) rows = rows.filter((c) => c.status === "已办结" || c.status === "已查阅");
+        document.getElementById("tbody").innerHTML = rows.map((c, i) => {
+          if (isTodo) {
+            return `<tr>
+              <td class="check"><input type="checkbox" value="${c.id}"></td>
+              <td>${i + 1}</td>
+              <td>${c.platName || ""}</td>
+              <td>${c.shopName || ""}</td>
+              <td class="wrap">${c.shopUrl || ""}</td>
+              <td>${c.subject || ""}</td>
+              <td>${c.credit || ""}</td>
+              <td class="wrap">${c.goodsName || ""}</td>
+              <td class="wrap">${c.goodsUrl || ""}</td>
+              <td>${c.monitorDate || ""}</td>
+              <td>${violateOf(c)}</td>
+              <td>${dispatchOf(c)}</td>
+              <td>${deadlineChip(c.deadline)}</td>
+              <td class="tbl-ops">${todoOps(c)}</td>
+            </tr>`;
+          }
+          if (isDone) {
+            return `<tr>
+              <td>${i + 1}</td>
+              <td>${c.platName || ""}</td>
+              <td>${c.shopName || ""}</td>
+              <td class="wrap">${c.shopUrl || ""}</td>
+              <td>${c.subjectType || ""}</td>
+              <td>${c.subject || ""}</td>
+              <td>${c.credit || ""}</td>
+              <td class="wrap">${c.goodsName || ""}</td>
+              <td>${c.goodsCat || ""}</td>
+              <td class="wrap">${c.goodsUrl || ""}</td>
+              <td>${c.monitorDate || ""}</td>
+              <td>${violateOf(c)}</td>
+              <td class="tbl-ops">${ops(c)}</td>
+            </tr>`;
+          }
+          return `<tr>
+            <td>${i + 1}</td>
+            <td>${c.platName || ""}</td>
+            <td>${c.shopName || ""}</td>
+            <td class="wrap">${c.shopUrl || ""}</td>
+            <td>${c.subjectType || ""}</td>
+            <td>${c.subject || ""}</td>
+            <td>${c.credit || ""}</td>
+            <td class="wrap">${c.goodsName || ""}</td>
+            <td>${c.goodsCat || ""}</td>
+            <td class="wrap">${c.goodsUrl || ""}</td>
+            <td>${c.monitorDate || ""}</td>
+            <td>${violateOf(c)}</td>
+            <td>${c.status || ""}</td>
+            <td>${deadlineChip(c.deadline)}</td>
+            <td class="tbl-ops">${ops(c)}</td>
+          </tr>`;
+        }).join("") || `<tr><td colspan="${isTodo ? 14 : isDone ? 13 : 15}" class="empty">无匹配线索</td></tr>`;
+        return;
+      }
+      const q = (document.getElementById("q").value || "").trim();
+      const src = document.getElementById("src").value;
+      const st = document.getElementById("st").value;
+      rows = rows
+        .filter((c) => !q || (c.subject || "").includes(q) || (c.item || "").includes(q) || (c.shopName || "").includes(q))
+        .filter((c) => !src || c.source === src)
+        .filter((c) => !st || c.status === st);
+      if (view === "copy") rows = rows.filter((c) => c.copied);
+      document.getElementById("tbody").innerHTML = rows.map((c) => `<tr>
+        <td>${c.source}${c.copied ? " · 抄送" : ""}</td>
+        <td><a class="linkish" href="${page("clue-detail.html")}?id=${c.id}&from=${view}">${c.subject}</a></td>
+        <td>${c.item}</td>
+        <td>${c.area}</td>
+        <td>${statusChip(c.status)}</td>
+        <td>${c.created}</td>
+        <td>${ops(c)}</td>
+      </tr>`).join("") || `<tr><td colspan="7" class="empty">无匹配线索</td></tr>`;
+    }
+    function clearQ() {
+      ["q-plat", "q-shop", "q-shopurl", "q-stype", "q-credit", "q-goods", "q-gcat", "q-gurl", "q-from", "q-to", "q-item", "q-st", "q-copy", "q-case", "q-task", "q-unit", "q-dunit"].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.value = "";
+      });
+      paint();
+    }
+    function pickedIds() {
+      return [...document.querySelectorAll("#tbody input[type=checkbox]:checked")].map((el) => el.value);
+    }
+    function toggleAllClues(el) {
+      document.querySelectorAll("#tbody input[type=checkbox]").forEach((box) => { box.checked = el.checked; });
+    }
+    function openClueAdd() {
+      openModal(`
+        <div class="modal adj handle-form">
+          <div class="adj-h">
+            <h3>线索新增</h3>
+            <button type="button" class="icon-btn" onclick="closeModal()"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+          <div class="adj-body">
+            <h4 class="sec-h">主体信息</h4>
+            <div class="kv-form">
+              <div class="kv">
+                <div class="k"><span class="req">*</span>网店名称</div>
+                <div class="v"><input id="n-shop" autocomplete="off" placeholder="请输入"></div>
+                <div class="k"><span class="req">*</span>网店链接</div>
+                <div class="v"><input id="n-shopurl" autocomplete="off" placeholder="请输入"></div>
+              </div>
+              <div class="kv">
+                <div class="k"><span class="req">*</span>主体类型</div>
+                <div class="v"><select id="n-stype">${opt(Q_SUBJECT_TYPES, `<option value="">请选择</option>`)}</select></div>
+                <div class="k"><span class="req">*</span>主体名称</div>
+                <div class="v"><input id="n-name" autocomplete="off" placeholder="请输入"></div>
+              </div>
+              <div class="kv">
+                <div class="k"><span class="req">*</span>统一社会信用代码</div>
+                <div class="v"><input id="n-credit" autocomplete="off" placeholder="请输入"></div>
+                <div class="k">电商平台名称</div>
+                <div class="v"><input id="n-plat" autocomplete="off" placeholder="请输入"></div>
+              </div>
+            </div>
+            <h4 class="sec-h" style="margin-top:16px">商品信息</h4>
+            <div class="kv-form">
+              <div class="kv">
+                <div class="k"><span class="req">*</span>商品名称</div>
+                <div class="v"><input id="n-goods" autocomplete="off" placeholder="请输入"></div>
+                <div class="k">商品分类</div>
+                <div class="v"><select id="n-gcat">${opt(Q_GOODS_CATS)}</select></div>
+              </div>
+              <div class="kv span">
+                <div class="k">商品链接</div>
+                <div class="v"><input id="n-gurl" autocomplete="off" placeholder="请输入"></div>
+              </div>
+            </div>
+            <h4 class="sec-h" style="margin-top:16px">疑似违规信息</h4>
+            <div class="kv-form">
+              <div class="kv">
+                <div class="k"><span class="req">*</span>监测日期</div>
+                <div class="v"><input id="n-date" type="date"></div>
+                <div class="k"><span class="req">*</span>涉嫌违规类型</div>
+                <div class="v"><input id="n-item" autocomplete="off" placeholder="请输入"></div>
+              </div>
+            </div>
+          </div>
+          <div class="adj-foot">
+            <button type="button" class="btn-ghost" onclick="closeModal()">取消</button>
+            <button type="button" class="btn-primary" onclick="confirmClueAdd()">提交</button>
+          </div>
+        </div>`);
+    }
+    function nv(id) {
+      const el = document.getElementById(id);
+      return el ? (el.value || "").trim() : "";
+    }
+    function confirmClueAdd() {
+      if (!nv("n-shop") || !nv("n-shopurl") || !nv("n-stype") || !nv("n-name") || !nv("n-credit") || !nv("n-goods") || !nv("n-date") || !nv("n-item")) {
+        return toast("请填写必填项");
+      }
+      if (!confirm("确认新增线索？")) return;
+      const id = "C" + Date.now();
+      patchRow("clues", id, {
+        id,
+        source: "人工录入",
+        platName: nv("n-plat"),
+        shopName: nv("n-shop"),
+        shopUrl: nv("n-shopurl"),
+        subjectType: nv("n-stype"),
+        subject: nv("n-name"),
+        credit: nv("n-credit"),
+        goodsName: nv("n-goods"),
+        goodsCat: nv("n-gcat"),
+        goodsUrl: nv("n-gurl"),
+        monitorDate: nv("n-date"),
+        item: nv("n-item"),
+        violateType: nv("n-item"),
+        status: "待处置",
+        deadline: "正常",
+        copied: false,
+        created: nv("n-date") + " 00:00",
+        handleUnit: "福建省市场监督管理局",
+        dispatchUnit: "福建省市场监督管理局",
+        area: "鼓楼区",
+      });
+      closeModal();
+      toast("已新增线索");
+      paint();
+    }
+    function openClueBatchAdd() {
+      openModal(`
+        <div class="modal">
+          <div class="adj-h" style="padding:0 0 12px;border:0">
+            <h3>批量新增</h3>
+            <button type="button" class="icon-btn" onclick="closeModal()"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+          <p class="sub">请下载模板，根据模板内容完善线索信息后，再进行文件上传。</p>
+          <div class="actions" style="margin-top:12px">
+            <button type="button" class="btn-ghost" onclick="toast('已下载模板（演示）')">下载模板</button>
+            <button type="button" class="btn-primary" onclick="toast('已导入（演示）');closeModal()">导入</button>
+          </div>
+        </div>`);
+    }
+    function deletePicked(batch) {
+      const ids = pickedIds();
+      if (!ids.length) return toast("请先勾选线索");
+      if (!batch && ids.length > 1) return toast("删除请只勾选一条，多条请用批量删除");
+      if (!confirm(batch ? "确认批量删除已选线索？" : "确认删除该线索？")) return;
+      ids.forEach((id) => patchRow("clues", id, { hidden: true }));
+      toast(batch ? "已批量删除" : "已删除");
+      location.reload();
+    }
+    function exportClue() { toast("已导出（演示）"); }
+    window.paint = paint;
+    window.clearQ = clearQ;
+    window.exportClue = exportClue;
+    window.toggleAllClues = toggleAllClues;
+    window.deletePicked = deletePicked;
+    window.openClueAdd = openClueAdd;
+    window.openClueBatchAdd = openClueBatchAdd;
+    window.confirmClueAdd = confirmClueAdd;
+    paint();
+  </script>
+</body>
+</html>

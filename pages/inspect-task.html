@@ -1,0 +1,118 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>任务详情 · 查看 · 网监分级分类</title>
+  <link rel="stylesheet" href="../assets/vendor/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="../assets/app.css?v=33">
+</head>
+<body>
+  <div class="app" id="app"></div>
+  <script src="../assets/common.js?v=41"></script>
+  <script>
+    const k = checkOf(qs("id"));
+    const pack = k ? packOf(k.packId) : null;
+    const from = qs("from");
+    const back = from === "pack"
+      ? page("inspect-pack.html") + "?id=" + (k ? k.packId : "")
+      : page("inspect-list.html") + "?view=" + (from === "done" || (k && (k.status === "已检查" || k.status === "无法检查")) ? "done" : "todo");
+    function cell(v) {
+      return v == null || v === "" ? "—" : v;
+    }
+    function kv3(pairs) {
+      let html = "";
+      for (let i = 0; i < pairs.length; i += 3) {
+        const slice = pairs.slice(i, i + 3);
+        while (slice.length < 3) slice.push(null);
+        html += `<div class="kv cols3">` + slice.map((p) => (
+          p ? `<div class="k">${p[0]}</div><div class="v">${p[2] ? p[1] : cell(p[1])}</div>`
+            : `<div class="k"></div><div class="v"></div>`
+        )).join("") + `</div>`;
+      }
+      return html;
+    }
+    function defaultFlow(row) {
+      if (row.flow && row.flow.length) return row.flow;
+      const create = { op: "派发", org: "福建省市场监督管理局省处", who: "吴大大", date: "2025.11.11" };
+      const backNode = { op: "退回", org: "福建省市场监督管理局省处", who: "吴大大", date: "2025.11.12" };
+      const assign = { op: "派发", org: "福建省市场监督管理局省处", who: "李监管", date: "2025.11.13" };
+      if (row.status === "未派发" || row.status === "未指派" || !row.station) return [create, backNode];
+      if (row.status === "未检查") return [create, backNode, assign];
+      return [create, backNode, assign, {
+        op: "检查",
+        org: row.inspectOrg || row.station || "—",
+        who: row.inspector || "—",
+        date: row.inspectTime || "—",
+      }];
+    }
+    function inspectPairs(row) {
+      const head = [
+        ["检查人员", row.inspector],
+        ["检查时间", row.inspectTime],
+        ["实施检查机构", row.inspectOrg],
+        ["状态", statusChip(row.status), true],
+      ];
+      if (row.status !== "已检查") return head;
+      const items = [
+        ["是否属于本市场所管辖", row.inScope],
+        ["网址是否有效", row.valid],
+        ["营业执照是否合规", row.licenseOk],
+      ];
+      if (row.licenseOk === "否") items.push(["营业执照不合规理由", row.licenseReason]);
+      items.push(["许可(备案)是否合规", row.permitOk]);
+      if (row.permitOk === "否") items.push(["许可(备案)不合规理由", row.permitReason]);
+      items.push(
+        ["是否经营食品", row.food],
+        ["是否经营药品", row.drug],
+        ["是否经营医疗器械", row.device],
+        ["是否经营化妆品", row.cosmetic],
+        ["是否发现涉嫌违法违规行为", row.violate]
+      );
+      return head.concat(items);
+    }
+    document.getElementById("app").innerHTML = shellStart() + (k ? `
+      <section class="card insp-task">
+        <h3 class="sec-h">主体信息</h3>
+        <div class="kv-form">${kv3([
+          ["所属平台", k.platName],
+          ["网店名称", k.shopName || k.target],
+          ["网店地址", k.url],
+          ["主体名称", k.name],
+          ["统一社会信用代码", k.credit],
+          ["登记地址", k.address],
+          ["所在区域", k.region || k.area],
+          ["管辖所", k.station],
+          ["经营产品类别", k.product],
+          ["是否为本地产品", k.localProduct],
+          ["网店总销售额", k.sales],
+          ["行政处罚数量", k.penalty],
+          ["经营异常情况", k.abnormal],
+          ["是否为本地电商平台", k.localPlat],
+          ["业务子库", k.tag],
+          ["分级分类等级", k.grade],
+        ])}</div>
+        <h3 class="sec-h">检查信息</h3>
+        <div class="kv-form">${kv3(inspectPairs(k))}</div>
+        <h3 class="sec-h">办理信息</h3>
+        <div class="clue-flow">${defaultFlow(k).map((n) => `
+          <div class="clue-flow-item">
+            <div class="dot"></div>
+            <div class="op">${n.op}</div>
+            <div class="org">${n.org || "—"}</div>
+            <div class="who">${n.who || ""}</div>
+            <div class="date">${n.date || ""}</div>
+          </div>`).join("")}</div>
+        <div class="actions">
+          <a class="btn-ghost" href="${back}">返回</a>
+        </div>
+      </section>
+    ` : `<section class="card"><p class="empty">未找到该主体</p></section>`) + shellEnd();
+    document.getElementById("crumb").textContent = from === "pack"
+      ? "检查任务管理 / 任务派发 / 任务详情 / 查看"
+      : "检查任务管理 / 检查任务 / " + (from === "done" ? "已检查" : "待检查") + " / 查看";
+    const pageEl = document.querySelector(".page");
+    if (pageEl) pageEl.classList.add("wide");
+  </script>
+</body>
+</html>

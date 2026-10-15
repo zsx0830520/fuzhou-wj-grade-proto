@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>商品详情 · 福州网监直播采集</title>
+  <link rel="stylesheet" href="../../assets/vendor/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="../assets/app.css">
+</head>
+<body>
+  <div class="app" id="app"></div>
+  <script src="../assets/common.js"></script>
+  <script>
+    const product = getProduct(qs("id")) || PRODUCTS[0];
+    const room = getRoom(product.roomId);
+
+    document.getElementById("app").innerHTML = shellStart("products") + `
+      <p class="muted" style="margin:0 0 12px"><a class="linkish" href="products.html">商品监测结果</a> / ${product.name}</p>
+      <div class="grid-2">
+        <section class="card">
+          <img src="${product.img}" alt="${product.name}" style="width:100%;height:240px;object-fit:cover;border-radius:4px;margin-bottom:14px;background:#e8eef6">
+          <h2>${product.name}</h2>
+          <p class="sub">${product.id} · ${product.price}</p>
+          <dl class="dl">
+            <dt>监测来源</dt><dd><span class="chip ${product.from === "专项监测" ? "chip-c" : "chip-a"}">${product.from}</span> ${product.task}</dd>
+            <dt>发现时间</dt><dd>${product.time}</dd>
+            <dt>展示售价</dt><dd>${product.price}</dd>
+          </dl>
+        </section>
+        <section class="card">
+          <h2>来源直播间</h2>
+          <p class="sub">${room ? room.name : "—"}</p>
+          <dl class="dl">
+            <dt>所属平台</dt><dd>${room?.platform || "—"}</dd>
+            <dt>直播间名称</dt><dd>${room ? `<a class="linkish" href="room-detail.html?id=${room.id}">${room.name}</a>` : "—"}</dd>
+            <dt>主体名称</dt><dd>${room?.subject || "—"}</dd>
+            <dt>统一社会信用代码</dt><dd>${room?.credit || "—"}</dd>
+            <dt>所在区域</dt><dd>${room?.area || "—"}</dd>
+            <dt>管辖所</dt><dd>${room?.station || "—"}</dd>
+            <dt>经营产品类别</dt><dd>${room?.category || "—"}</dd>
+          </dl>
+        </section>
+      </div>
+    ` + shellEnd();
+    document.getElementById("crumb").textContent = "商品详情";
+  </script>
+</body>
+</html>

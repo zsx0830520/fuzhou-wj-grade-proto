@@ -1,0 +1,40 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>线索详情 · 网监分级分类</title>
+  <link rel="stylesheet" href="../assets/vendor/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="../assets/app.css?v=33">
+</head>
+<body>
+  <div class="app" id="app"></div>
+  <script src="../assets/common.js?v=41"></script>
+  <script>
+    const c = clueOf(qs("id"));
+    const from = qs("from") || "todo";
+    const backHref = page("clues.html") + (from === "handle" || from === "dispatch" ? "?view=todo" : "?view=" + from);
+    document.getElementById("app").innerHTML = shellStart() + (c ? `
+      <section class="card clue-detail">
+        <div class="sub-view-h">
+          <h2>查看</h2>
+          <a class="btn-ghost" href="${backHref}">关闭</a>
+        </div>
+        ${renderClueQueryDetail(c)}
+        ${from === "query" || from === "copy" ? "" : `
+        <div class="actions">
+          ${clueOpsHtml(c).replace(`<a class="btn-ghost" href="${page("clue-detail.html")}?id=${c.id}">查看</a>`, "")}
+        </div>`}
+      </section>
+    ` : `<section class="card"><p class="empty">未找到该线索</p></section>`) + shellEnd();
+    document.getElementById("crumb").textContent = c
+      ? (from === "query" ? "违法违规线索 / 线索查询 / 查看"
+        : from === "copy" ? "违法违规线索 / 线索抄送查询 / 查看"
+        : from === "done" ? "违法违规线索 / 线索处理 / 已处理 / 查看"
+        : "违法违规线索 / 线索处理 / 待处理 / 查看")
+      : "违法违规线索";
+    const pageEl = document.querySelector(".page");
+    if (pageEl) pageEl.classList.add("wide");
+  </script>
+</body>
+</html>

@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>直播间详情 · 福州网监直播采集</title>
+  <link rel="stylesheet" href="../../assets/vendor/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="../assets/app.css">
+</head>
+<body>
+  <div class="app" id="app"></div>
+  <script src="../assets/common.js?v=6"></script>
+  <script>
+    const room = getRoom(qs("id")) || ROOMS[0];
+    const clips = getVisibleClips().filter(c => c.roomId === room.id);
+    const clues = getCluesMerged().filter(c => c.roomId === room.id);
+    const month = qs("month");
+    const back = qs("from") === "special"
+      ? `<a class="linkish" href="special-detail.html?id=${qs("task") || "T001"}">专项任务</a>`
+      : month
+        ? `<a class="linkish" href="${page("index.html")}">常规监测</a> / <a class="linkish" href="regular-detail.html?month=${month}">${(MONTH_CAMPAIGNS[month] || {}).label || "监测详情"}</a>`
+        : `<a class="linkish" href="${page("index.html")}">常规监测</a>`;
+
+    document.getElementById("app").innerHTML = shellStart(qs("from") === "special" ? "special" : "regular") + `
+      <p class="muted" style="margin:0 0 12px">${back} / ${room.name}</p>
+      <div class="grid-2">
+        <section class="card">
+          <h2>${room.name} ${levelChip(room.level)}</h2>
+          <p class="sub">${room.inPool ? "本月常规监测池内" : "本月未进入常规抽池"} · ${room.platform}</p>
+          <dl class="dl">
+            <dt>所属平台</dt><dd>${room.platform}</dd>
+            <dt>直播间名称</dt><dd>${room.name}</dd>
+            <dt>直播间地址</dt><dd><a class="linkish" href="${room.url}" target="_blank" rel="noreferrer">${room.url}</a></dd>
+            <dt>主体名称</dt><dd>${room.subject}</dd>
+            <dt>统一社会信用代码</dt><dd>${room.credit}</dd>
+            <dt>登记地址</dt><dd>${room.regAddr}</dd>
+            <dt>所在区域</dt><dd>${room.area}</dd>
+            <dt>管辖所</dt><dd>${room.station}</dd>
+            <dt>经营产品类别</dt><dd>${room.category}</dd>
+          </dl>
+        </section>
+        <section class="card">
+          <h2>采集摘要</h2>
+          <p class="sub">未开播不记巡检。无异常切片已自动删除。</p>
+          <div class="stats" style="grid-template-columns:1fr 1fr">
+            <div class="stat"><b>${clips.length}</b><span>当前留存切片</span></div>
+            <div class="stat"><b>${room.clipAutoCleared}</b><span>已自动清理</span></div>
+            <div class="stat"><b>${clues.length}</b><span>违规线索</span></div>
+            <div class="stat"><b>${room.lastLive}</b><span>最近开播采集</span></div>
+          </div>
+        </section>
+      </div>
+      <section class="block card">
+        <h2>监测切片</h2>
+        <p class="sub">仅留存发现线索的切片。商品识别不保留切片。支持回放与手动删除。</p>
+        <div class="clips">${clips.map(c => `
+          <article class="clip">
+            <img src="${c.cover}" alt="">
+            <div class="bd">
+              <h4>${c.id}</h4>
+              <div class="muted">${c.start} · ${c.ai}</div>
+              <div class="clip-ops">
+                <button class="btn-primary" onclick="openPlayer('${c.id}')">播放</button>
+                <button class="btn-danger" onclick="deleteClip('${c.id}')">删除</button>
+              </div>
+            </div>
+          </article>`).join("") || '<div class="empty">当前没有留存切片（无异常切片已自动清理）</div>'}
+        </div>
+      </section>
+      <section class="block card">
+        <h2>违规线索</h2>
+        <div class="table-wrap" style="margin-top:12px"><table>
+          <thead><tr><th>编号</th><th>类型</th><th>发现时间</th><th>状态</th><th></th></tr></thead>
+          <tbody>${clues.map(c => `
+            <tr>
+              <td>${c.id}</td><td>${c.type}</td>
+              <td>${c.time}</td>
+              <td>${clueStatusChip(c)}</td>
+              <td>${clueOpsHtml(c, `<a class="btn-ghost btn" href="clue-detail.html?id=${c.id}">查看</a>`)}</td>
+            </tr>`).join("") || '<tr><td colspan="5" class="empty">暂无违规线索</td></tr>'}</tbody>
+        </table></div>
+      </section>
+    ` + shellEnd();
+    document.getElementById("crumb").textContent = "直播间详情";
+  </script>
+</body>
+</html>

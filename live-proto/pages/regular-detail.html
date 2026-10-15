@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>常规监测详情 · 福州网监直播采集</title>
+  <link rel="stylesheet" href="../../assets/vendor/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="../assets/app.css">
+</head>
+<body>
+  <div class="app" id="app"></div>
+  <script src="../assets/common.js"></script>
+  <script>
+    let currentYm = qs("month") && MONTH_CAMPAIGNS[qs("month")] ? qs("month") : CURRENT_MONTH;
+
+    document.getElementById("app").innerHTML = shellStart("regular") + `
+      <p class="muted" style="margin:0 0 12px"><a class="linkish" href="${page("index.html")}">常规监测</a> / <span id="crumb-month"></span></p>
+      <section class="card">
+        <div class="row-between" style="align-items:flex-start">
+          <div>
+            <h2 id="month-title"></h2>
+            <p class="sub" id="month-sub"></p>
+          </div>
+          <span id="month-tag"></span>
+        </div>
+        <div class="stats">
+          <div class="stat"><b id="st-pool">0</b><span>监测池</span></div>
+          <div class="stat"><b id="st-clips">0</b><span>留存切片</span></div>
+          <div class="stat"><b id="st-cleared">0</b><span>已自动清理</span></div>
+          <div class="stat"><b id="st-clues">0</b><span id="st-clues-label">线索</span></div>
+        </div>
+      </section>
+      <section class="block card">
+        <h2 id="pool-title">监测池</h2>
+        <p class="sub">展示该月抽中的直播间。未开播切换不产生记录。</p>
+        <div class="toolbar">
+          <input class="search" id="kw" placeholder="搜索直播间 / 主体 / 信用代码" oninput="renderTable()">
+          <select id="plat" onchange="renderTable()">
+            <option value="">全部平台</option>
+            <option>抖音</option><option>快手</option><option>淘宝直播</option><option>视频号</option><option>京东直播</option>
+          </select>
+          <select id="lv" onchange="renderTable()">
+            <option value="">全部等级</option>
+            <option>A</option><option>B</option><option>C</option><option>D</option>
+          </select>
+          <select id="clue" onchange="renderTable()">
+            <option value="">线索情况</option>
+            <option value="1">有线索</option>
+            <option value="0">无线索</option>
+          </select>
+        </div>
+        <div class="table-wrap"><table>
+          <thead><tr>
+            <th>直播间</th><th>平台</th><th>等级</th><th>主体</th><th>区域 / 管辖所</th><th>留存切片</th><th>自动清理</th><th>线索</th><th>已处理线索</th><th>最近开播采集</th><th></th>
+          </tr></thead>
+          <tbody id="tbody"></tbody>
+        </table></div>
+      </section>
+    ` + shellEnd();
+    document.getElementById("crumb").textContent = "常规监测详情";
+
+    function camp() {
+      return MONTH_CAMPAIGNS[currentYm];
+    }
+    function isCurrent() {
+      return currentYm === CURRENT_MONTH;
+    }
+    function paintMonth() {
+      const c = camp();
+      const r = c.ratios;
+      document.getElementById("crumb-month").textContent = c.label;
+      document.getElementById("month-title").textContent = c.label + " · 监测详情";
+      document.getElementById("month-sub").textContent = `该月抽池比例 A ${r.A}% · B ${r.B}% · C ${r.C}% · D ${r.D}%。未开播不记巡检。`;
+      document.getElementById("month-tag").innerHTML = isCurrent()
+        ? `<span class="chip chip-ok">当前月</span>`
+        : `<span class="chip chip-wait">历史监测</span>`;
+      document.getElementById("st-pool").textContent = c.stats.pool;
+      document.getElementById("st-clips").textContent = c.stats.clips;
+      document.getElementById("st-cleared").textContent = c.stats.cleared;
+      document.getElementById("st-clues").textContent = c.stats.clues;
+      document.getElementById("st-clues-label").textContent = isCurrent() ? "待处理线索" : "当月线索";
+      document.getElementById("pool-title").textContent = isCurrent() ? "本月监测池" : c.label + "监测池";
+      renderTable();
+    }
+    function renderTable() {
+      const kw = (document.getElementById("kw").value || "").trim();
+      const plat = document.getElementById("plat").value;
+      const lv = document.getElementById("lv").value;
+      const clue = document.getElementById("clue").value;
+      const rows = roomsForMonth(currentYm)
+        .filter(r => !plat || r.platform === plat)
+        .filter(r => !lv || r.level === lv)
+        .filter(r => clue === "" || (clue === "1" ? r.clueCount > 0 : r.clueCount === 0))
+        .filter(r => !kw || [r.name, r.subject, r.credit, r.station].join("").includes(kw));
+      document.getElementById("tbody").innerHTML = rows.map(r => `
+        <tr>
+          <td><a class="linkish" href="room-detail.html?id=${r.id}&month=${currentYm}">${r.name}</a></td>
+          <td>${r.platform}</td>
+          <td>${levelChip(r.level)}</td>
+          <td>${r.subject}</td>
+          <td>${r.area}<div class="muted">${r.station}</div></td>
+          <td>${r.clipKept}</td>
+          <td>${r.clipAutoCleared}</td>
+          <td>${r.clueCount ? `<span class="chip chip-d">${r.clueCount}</span>` : "—"}</td>
+          <td>${handledClueCountForRow(r) || "—"}</td>
+          <td>${r.lastLive}</td>
+          <td><a class="btn-ghost btn" href="room-detail.html?id=${r.id}&month=${currentYm}">查看</a></td>
+        </tr>`).join("") || `<tr><td colspan="11" class="empty">该月没有符合条件的直播间</td></tr>`;
+    }
+    paintMonth();
+  </script>
+</body>
+</html>

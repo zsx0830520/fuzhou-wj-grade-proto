@@ -1,0 +1,125 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>调级审批 · 网监分级分类</title>
+  <link rel="stylesheet" href="../assets/vendor/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="../assets/app.css?v=33">
+</head>
+<body>
+  <div class="app" id="app"></div>
+  <script src="../assets/common.js?v=41"></script>
+  <script>
+    const tab = qs("tab") || "todo";
+    const want = tab === "todo" ? "待办理" : "已办理";
+    const ORG = ["福州市市场监督管理局", "厦门市市场监督管理局", "鼓楼区市场监督管理局", "台江区市场监督管理局", "仓山区市场监督管理局"];
+    const TYPES = ["电商平台主体", "电商平台内经营者", "直播间运营者"];
+
+    function opt(list) {
+      return `<option value="">全部</option>` + list.map((x) => `<option>${x}</option>`).join("");
+    }
+    function fld(id, label, html) {
+      return `<div class="flt-item"><label>${label}</label>${html}</div>`;
+    }
+
+    document.getElementById("app").innerHTML = shellStart() + `
+      <section class="card">
+        <h2>${want}</h2>
+        <div class="flt-grid">
+          ${fld("q-name", "主体名称", `<input id="q-name" autocomplete="off">`)}
+          ${fld("q-credit", "统一社会信用代码", `<input id="q-credit" autocomplete="off">`)}
+          ${fld("q-org", "登记机关", `<select id="q-org">${opt(ORG)}</select>`)}
+          ${fld("q-user", "提请人员", `<input id="q-user" autocomplete="off">`)}
+          ${fld("q-type", "主体类型", `<select id="q-type">${opt(TYPES)}</select>`)}
+          <div class="flt-item">
+            <label>提请时间</label>
+            <div class="date-range">
+              <input id="q-from" type="date">
+              <input id="q-to" type="date">
+            </div>
+          </div>
+          ${fld("q-op", "操作", `<select id="q-op">${opt(["需我办理", "办理中"])}</select>`)}
+        </div>
+        <div class="flt-actions">
+          <button type="button" class="btn-ghost" onclick="clearQ()">${antIco("clear", "清空")}</button>
+          <button type="button" class="btn-primary" onclick="paint()">${antIco("search", "查询")}</button>
+        </div>
+        <p class="spec">待办中「办理」为需我办理；「查看」为已交其他人员办理中。已办仅查看，不再处置。</p>
+        <div class="table-wrap"><table class="wide-tbl">
+          <thead><tr>
+            <th>序号</th><th>主体类型</th><th>主体名称</th><th>统一社会信用代码</th>
+            <th>公司名称</th><th>登记机关</th><th>提请时间</th><th>提请人员</th><th>操作</th>
+          </tr></thead>
+          <tbody id="tbody"></tbody>
+        </table></div>
+      </section>
+    ` + shellEnd();
+    document.getElementById("crumb").textContent = "分级分类结果 / 调级审批 / " + want;
+    const pageEl = document.querySelector(".page");
+    if (pageEl) pageEl.classList.add("wide");
+
+    function v(id) {
+      const el = document.getElementById(id);
+      return el ? (el.value || "").trim() : "";
+    }
+    function asDay(s) {
+      return (s || "").replace(/\./g, "-").slice(0, 10);
+    }
+    function opKind(a) {
+      if (a.status !== "待办理") return "查看";
+      return a.canHandle ? "办理" : "查看";
+    }
+    function paint() {
+      const name = v("q-name");
+      const credit = v("q-credit");
+      const org = v("q-org");
+      const user = v("q-user");
+      const type = v("q-type");
+      const from = v("q-from");
+      const to = v("q-to");
+      const op = v("q-op");
+      const rows = approvals().filter((a) => a.status === want)
+        .filter((a) => !name || (a.subject || "").includes(name))
+        .filter((a) => !credit || (a.credit || "").includes(credit))
+        .filter((a) => !org || a.org === org)
+        .filter((a) => !user || (a.applicant || "").includes(user))
+        .filter((a) => !type || a.typeLabel === type)
+        .filter((a) => !from || asDay(a.created) >= from)
+        .filter((a) => !to || asDay(a.created) <= to)
+        .filter((a) => {
+          if (!op) return true;
+          if (op === "需我办理") return a.status === "待办理" && a.canHandle;
+          if (op === "办理中") return a.status === "待办理" && !a.canHandle;
+          return true;
+        });
+      document.getElementById("tbody").innerHTML = rows.map((a, i) => {
+        const kind = opKind(a);
+        return `<tr>
+          <td>${i + 1}</td>
+          <td>${a.typeLabel || "—"}</td>
+          <td>${a.subject}</td>
+          <td>${a.credit || "—"}</td>
+          <td>${a.company || "—"}</td>
+          <td>${a.org || "—"}</td>
+          <td>${a.created || "—"}</td>
+          <td>${a.applicant || "—"}</td>
+          <td class="tbl-ops">${
+            kind === "办理"
+              ? `<a href="javascript:void(0)" onclick="openApproveHandle('${a.id}')">办理</a>`
+              : `<a href="javascript:void(0)" onclick="openApproveView('${a.id}')">查看</a>`
+          }</td>
+        </tr>`;
+      }).join("") || `<tr><td colspan="9" class="empty">暂无${want}任</td></tr>`;
+    }
+    function clearQ() {
+      ["q-name", "q-credit", "q-org", "q-user", "q-type", "q-from", "q-to", "q-op"].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.value = "";
+      });
+      paint();
+    }
+    paint();
+  </script>
+</body>
+</html>

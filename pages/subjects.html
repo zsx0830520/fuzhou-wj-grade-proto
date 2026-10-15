@@ -1,0 +1,916 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>主体库 · 网监分级分类</title>
+  <link rel="stylesheet" href="../assets/vendor/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="../assets/app.css?v=36">
+</head>
+<body>
+  <div class="app" id="app"></div>
+  <script src="../assets/common.js?v=41"></script>
+  <script>
+    const rawType = qs("type") || "platform";
+    if (rawType === "anchor" || rawType === "mcn") {
+      location.replace("subjects.html?type=live");
+    }
+    const type = rawType === "anchor" || rawType === "mcn" ? "live" : rawType;
+    const titles = {
+      platform: "电商平台",
+      seller: "平台内经营者",
+      site: "网站",
+      mp: "公众号",
+      mini: "小程序",
+      app: "APP",
+      liveplat: "直播平台",
+      live: "直播间运营者",
+      ent: "企业",
+    };
+    const isEnt = type === "ent";
+    const isLiveOp = type === "live";
+    const isLivePlat = type === "liveplat";
+    const profile = SUB_PROFILES[type] || null;
+    const platLabel = type === "seller" ? "店铺名称" : isLiveOp ? "直播间名称" : "平台名称";
+    const LIVE_STATIONS = Object.keys(STATION_REGION);
+    const DATA_TYPES = type === "platform" ? ["网站", "APP", "小程序", "公众号"] : [...new Set(subjects().filter((s) => s.type === type).map((s) => s.dataType).filter(Boolean))];
+    const STATIONS = [...new Set(subjects().filter((s) => s.type === type).map((s) => s.station).filter(Boolean))];
+    const PRODUCTS = [...new Set(subjects().filter((s) => s.type === type).flatMap((s) => splitMergeVals(s.product)))];
+    const TAGS = [...new Set(subjects().filter((s) => s.type === type).flatMap((s) => splitMergeVals(s.tag)))];
+    const ADDRS = [...new Set(subjects().filter((s) => s.type === type).map((s) => s.address).filter(Boolean))];
+    const REGIONS = [...new Set(subjects().filter((s) => s.type === type).map((s) => s.region).filter(Boolean))];
+    const SOURCES = ["自动采集", "人工录入"];
+    const OPS = ["李监管", "吴小小"];
+
+    function opt(list) {
+      return `<option value="">全部</option>` + list.map((x) => `<option>${x}</option>`).join("");
+    }
+    function fld(id, label, html) {
+      return `<div class="flt-item"><label>${label}</label>${html}</div>`;
+    }
+    const extraFlt = `
+          ${fld("q-inlib", "是否在市监标准库", `<select id="q-inlib"><option value="">全部</option><option>是</option><option>否</option></select>`)}
+          <div class="flt-item" id="flt-time">
+            <label id="lbl-time">更新时间</label>
+            <div class="date-range">
+              <input id="q-from" type="date">
+              <input id="q-to" type="date">
+            </div>
+          </div>
+          <div class="flt-item" id="flt-user" hidden>
+            <label>操作人员</label>
+            <select id="q-user">${opt(OPS)}</select>
+          </div>`;
+
+    function profileOpts(f) {
+      if (f.opts) return f.opts;
+      if (f.optsKey === "stations") return STATIONS.length ? STATIONS : LIVE_STATIONS;
+      if (f.optsKey === "products") return PRODUCTS;
+      if (f.optsKey === "tags") return TAGS;
+      if (f.optsKey === "regions") return REGIONS.length ? REGIONS : [...new Set(Object.values(STATION_REGION))];
+      return [];
+    }
+    function profileFltHtml() {
+      return profile.filters.map((f) => f.kind === "select"
+        ? fld(f.id, f.label, `<select id="${f.id}">${opt(profileOpts(f))}</select>`)
+        : fld(f.id, f.label, `<input id="${f.id}" autocomplete="off">`)
+      ).join("") + extraFlt;
+    }
+    const profileHead = profile
+      ? `<th style="width:36px"><input type="checkbox" id="check-all" onclick="toggleAll(this.checked)"></th>
+              <th>序号</th>${profile.cols.map((c) => `<th>${c.label}</th>`).join("")}<th>是否在市监标准库</th><th>更新时间</th><th>操作</th>`
+      : "";
+    const profileLogHead = profile
+      ? `<th>序号</th><th>变动类型</th>${profile.cols.map((c) => `<th>${c.label}</th>`).join("")}<th>操作人员</th><th>操作时间</th><th>操作</th>`
+      : "";
+
+    const filterHtml = isEnt ? `
+          ${fld("q-name", "企业名称", `<input id="q-name" autocomplete="off">`)}
+          ${fld("q-org", "登记机关", `<select id="q-org">${opt(ENT_ORGS)}</select>`)}
+          ${fld("q-addr", "注册地址", `<input id="q-addr" autocomplete="off">`)}
+          ${fld("q-credit", "统一社会信用代码", `<input id="q-credit" autocomplete="off">`)}
+          ${fld("q-enttype", "企业类型", `<select id="q-enttype">${opt(ENT_TYPES)}</select>`)}
+          ${fld("q-status", "经营状态", `<select id="q-status">${opt(ENT_STATUS)}</select>`)}
+          ${fld("q-legal", "法人", `<input id="q-legal" autocomplete="off">`)}
+          ${extraFlt}
+        ` : isLivePlat ? `
+          ${fld("q-name", "运营主体名称", `<input id="q-name" autocomplete="off">`)}
+          ${fld("q-plat", "平台名称", `<input id="q-plat" autocomplete="off">`)}
+          ${fld("q-scope", "主要业务范围", `<input id="q-scope" autocomplete="off">`)}
+          ${fld("q-grade", "分类等级", `<select id="q-grade">${opt(LIVEPLAT_GRADES)}</select>`)}
+          ${fld("q-ptype", "平台类型", `<select id="q-ptype">${opt(LIVEPLAT_TYPES)}</select>`)}
+          ${fld("q-credit", "统一社会信用代码", `<input id="q-credit" autocomplete="off">`)}
+          ${fld("q-access", "接入状态", `<select id="q-access">${opt(LIVEPLAT_ACCESS)}</select>`)}
+          ${fld("q-tag", "主体标签", `<input id="q-tag" autocomplete="off">`)}
+          ${extraFlt}
+        ` : isLiveOp ? `
+          ${fld("q-plat", "所属平台", `<select id="q-plat">${opt(LIVE_PLATS)}</select>`)}
+          ${fld("q-live", "直播间名称", `<input id="q-live" autocomplete="off">`)}
+          ${fld("q-path", "直播间地址", `<input id="q-path" autocomplete="off">`)}
+          ${fld("q-shop", "关联网店地址", `<input id="q-shop" autocomplete="off">`)}
+          ${fld("q-name", "主体名称", `<input id="q-name" autocomplete="off">`)}
+          ${fld("q-credit", "统一社会信用代码", `<input id="q-credit" autocomplete="off">`)}
+          ${fld("q-station", "管辖所", `<select id="q-station">${opt(STATIONS.length ? STATIONS : LIVE_STATIONS)}</select>`)}
+          ${extraFlt}
+        ` : profile ? profileFltHtml() : `
+          ${fld("q-dtype", "数据类型", `<select id="q-dtype">${opt(DATA_TYPES)}</select>`)}
+          ${fld("q-plat", platLabel, `<input id="q-plat" autocomplete="off">`)}
+          ${fld("q-path", "主要登录路径", `<input id="q-path" autocomplete="off">`)}
+          ${fld("q-name", "主体名称", `<input id="q-name" autocomplete="off">`)}
+          ${fld("q-addr", "登记地址", `<select id="q-addr">${opt(ADDRS)}</select>`)}
+          ${fld("q-credit", "统一社会信用代码", `<input id="q-credit" autocomplete="off">`)}
+          ${fld("q-station", "管辖所", `<select id="q-station">${opt(STATIONS)}</select>`)}
+          ${fld("q-product", "平台内产品属性", `<select id="q-product">${opt(PRODUCTS)}</select>`)}
+          ${fld("q-tag", "标签", `<select id="q-tag">${opt(TAGS)}</select>`)}
+          ${fld("q-src", "数据来源", `<select id="q-src">${opt(SOURCES)}</select>`)}
+          ${extraFlt}
+        `;
+    const tableHead = isEnt
+      ? `<th>序号</th><th>企业名称</th><th>统一社会信用代码</th><th>登记机关</th><th>注册地址</th><th>企业类型</th><th>经营状态</th><th>法人</th><th>是否在市监标准库</th><th>更新时间</th><th>操作</th>`
+      : isLivePlat
+      ? `<th style="width:36px"><input type="checkbox" id="check-all" onclick="toggleAll(this.checked)"></th>
+              <th>序号</th><th>平台名称</th><th>运营主体名称</th><th>统一社会信用代码</th><th>平台类型</th>
+              <th>主要业务范围</th><th>接入状态</th><th>分类等级</th><th>主体标签</th><th>是否在市监标准库</th><th>更新时间</th><th>操作</th>`
+      : isLiveOp
+      ? `<th style="width:36px"><input type="checkbox" id="check-all" onclick="toggleAll(this.checked)"></th>
+              <th>序号</th><th>所属平台</th><th>直播间名称</th><th>直播间地址</th><th>关联网店地址</th>
+              <th>主体名称</th><th>统一社会信用代码</th><th>管辖所</th><th>是否在市监标准库</th><th>更新时间</th><th>操作</th>`
+      : profile ? profileHead : `<th style="width:36px"><input type="checkbox" id="check-all" onclick="toggleAll(this.checked)"></th>
+              <th>序号</th><th>数据类型</th><th>${platLabel}</th><th>主要登录路径</th><th>主体名称</th>
+              <th>统一社会信用代码</th><th>登记地址</th><th>管辖所</th><th>平台内产品属性</th>
+              <th>标签</th><th>是否在市监标准库</th><th>更新时间</th><th>操作</th>`;
+
+    document.getElementById("app").innerHTML = shellStart() + `
+      <section class="card">
+        <h2>${titles[type] || "主体库"}</h2>
+        <div class="flt-grid">
+          ${filterHtml}
+        </div>
+        <div class="flt-actions">
+          <button type="button" class="btn-ghost" onclick="exportSub()">导出</button>
+          <button type="button" class="btn-ghost" onclick="clearQ()">${antIco("clear", "清空")}</button>
+          <button type="button" class="btn-primary" onclick="paint()">${antIco("search", "查询")}</button>
+        </div>
+        ${isEnt ? "" : `
+        <div class="sub-bar">
+          <div class="view-tabs">
+            <button type="button" id="tab-list" class="on" onclick="setTab('list')">主体列表</button>
+            <button type="button" id="tab-log" onclick="setTab('log')">新增/删除记录</button>
+          </div>
+          <div class="sub-bar-ops" id="list-ops">
+            <button type="button" class="btn-primary" onclick="openAddSubject()">${antIco("plus", "新增主体")}</button>
+            <button type="button" class="btn-primary" onclick="openBatchAdd()">批量新增主体</button>
+            <button type="button" class="btn-danger" onclick="delSelected(false)">${antIco("delete", "删除")}</button>
+            <button type="button" class="btn-danger" onclick="delSelected(true)">批量删除</button>
+          </div>
+        </div>`}
+        <div id="panel-list">
+          <div class="table-wrap"><table class="wide-tbl${profile ? " sub-profile-tbl" : ""}">
+            <thead><tr>
+              ${tableHead}
+            </tr></thead>
+            <tbody id="tbody"></tbody>
+          </table></div>
+        </div>
+        ${isEnt ? "" : `
+        <div id="panel-log" hidden>
+          <div class="table-wrap"><table class="wide-tbl${profile ? " sub-profile-tbl" : ""}">
+            <thead><tr>
+              <th>序号</th><th>变动类型</th>${isLivePlat
+                ? `<th>平台名称</th><th>运营主体名称</th><th>统一社会信用代码</th><th>平台类型</th><th>主要业务范围</th><th>接入状态</th><th>分类等级</th><th>主体标签</th>`
+                : isLiveOp
+                ? `<th>所属平台</th><th>直播间名称</th><th>直播间地址</th><th>关联网店地址</th><th>主体名称</th><th>统一社会信用代码</th><th>管辖所</th><th>是否在市监标准库</th>`
+                : profile ? profile.cols.map((c) => `<th>${c.label}</th>`).join("")
+                : `<th>数据类型</th><th>${platLabel}</th><th>主要登录路径</th>
+              <th>主体名称</th><th>统一社会信用代码</th><th>登记地址</th><th>管辖所</th>
+              <th>平台内产品属性</th><th>标签</th>`}<th>操作人员</th><th>操作时间</th><th>操作</th>
+            </tr></thead>
+            <tbody id="log-body"></tbody>
+          </table></div>
+        </div>`}
+      </section>
+    ` + shellEnd();
+    document.getElementById("crumb").textContent = "主体库 / " + (titles[type] || "");
+    const pageEl = document.querySelector(".page");
+    if (pageEl) pageEl.classList.add("wide");
+
+    let tab = "list";
+    function setTab(next) {
+      if (isEnt) return;
+      tab = next;
+      document.getElementById("tab-list").classList.toggle("on", next === "list");
+      document.getElementById("tab-log").classList.toggle("on", next === "log");
+      document.getElementById("panel-list").hidden = next !== "list";
+      document.getElementById("panel-log").hidden = next !== "log";
+      document.getElementById("list-ops").hidden = next !== "list";
+      const timeLbl = document.getElementById("lbl-time");
+      if (timeLbl) timeLbl.textContent = next === "log" ? "操作时间" : "更新时间";
+      const userFlt = document.getElementById("flt-user");
+      if (userFlt) userFlt.hidden = next !== "log";
+      paint();
+    }
+    function v(id) {
+      const el = document.getElementById(id);
+      return el ? (el.value || "").trim() : "";
+    }
+    function asDay(s) {
+      const t = (s || "").replace(/\./g, "-");
+      const p = t.split("-").map((x) => x.padStart(2, "0"));
+      if (p.length === 3) return p[0] + "-" + p[1] + "-" + p[2];
+      return t.slice(0, 10);
+    }
+    function list() {
+      return subjects().filter((s) => s.type === type);
+    }
+    function inLibChip(s) {
+      return (s.inStdLib || "是") === "否"
+        ? `<span class="chip chip-c">否</span>`
+        : `<span class="chip chip-ok">是</span>`;
+    }
+    function matchTime(val) {
+      if (v("q-from") && asDay(val) < v("q-from")) return false;
+      if (v("q-to") && asDay(val) > v("q-to")) return false;
+      return true;
+    }
+    function matchLib(row) {
+      return !v("q-inlib") || (row.inStdLib || "是") === v("q-inlib");
+    }
+    function matchProfile(row) {
+      if (!profile) return true;
+      return profile.filters.every((f) => {
+        const q = v(f.id);
+        if (!q) return true;
+        const val = isMergeField(row.type, f.key) ? fusedFieldText(row, f.key) : String(row[f.key] || "");
+        return f.kind === "select" && !isMergeField(row.type, f.key) ? val === q : val.includes(q);
+      });
+    }
+    function profileCells(row) {
+      return profile.cols.map((c) => {
+        const wrap = ["path", "address", "intro"].includes(c.key) ? ' class="wrap"' : "";
+        const val = isMergeField(row.type, c.key) ? fusedFieldText(row, c.key) : (row[c.key] || "—");
+        return `<td${wrap}>${val}</td>`;
+      }).join("");
+    }
+    function paint() {
+      if (!isEnt && tab === "log") {
+        const rows = subjectLogs().filter((l) => !l.type || l.type === type)
+          .filter((l) => matchLib(l))
+          .filter((l) => matchTime(l.time))
+          .filter((l) => !v("q-user") || l.operator === v("q-user"))
+          .filter((l) => profile ? matchProfile(l) : true)
+          .filter((l) => profile || !v("q-name") || (l.name || "").includes(v("q-name")))
+          .filter((l) => profile || !v("q-credit") || (l.credit || "").includes(v("q-credit")))
+          .filter((l) => profile || !v("q-plat") || (l.platName || "").includes(v("q-plat")));
+        window.__subLogs = rows;
+        const logSpan = profile ? profile.cols.length + 5 : 14;
+        document.getElementById("log-body").innerHTML = rows.map((l, i) => isLivePlat ? `<tr>
+          <td>${i + 1}</td>
+          <td>${l.op}</td>
+          <td>${l.platName || "—"}</td>
+          <td>${l.name || "—"}</td>
+          <td>${l.credit || "—"}</td>
+          <td>${l.platType || "—"}</td>
+          <td>${l.bizScope || "—"}</td>
+          <td>${l.accessStatus || "—"}</td>
+          <td>${l.grade || "—"}</td>
+          <td>${l.tag || "—"}</td>
+          <td>${l.operator || "—"}</td>
+          <td>${l.time || "—"}</td>
+          <td class="tbl-ops"><a href="javascript:void(0)" onclick="openSubjectLogView(${i})">查看</a></td>
+        </tr>` : isLiveOp ? `<tr>
+          <td>${i + 1}</td>
+          <td>${l.op}</td>
+          <td>${l.platName || "—"}</td>
+          <td>${l.liveName || "—"}</td>
+          <td>${l.path || "—"}</td>
+          <td>${l.shopUrl || "—"}</td>
+          <td>${l.name || "—"}</td>
+          <td>${l.credit || "—"}</td>
+          <td>${l.station || "—"}</td>
+          <td>${l.inStdLib || "—"}</td>
+          <td>${l.operator || "—"}</td>
+          <td>${l.time || "—"}</td>
+          <td class="tbl-ops"><a href="javascript:void(0)" onclick="openSubjectLogView(${i})">查看</a></td>
+        </tr>` : profile ? `<tr>
+          <td>${i + 1}</td>
+          <td>${l.op}</td>
+          ${profileCells(l)}
+          <td>${l.operator || "—"}</td>
+          <td>${l.time || "—"}</td>
+          <td class="tbl-ops"><a href="javascript:void(0)" onclick="openSubjectLogView(${i})">查看</a></td>
+        </tr>` : `<tr>
+          <td>${i + 1}</td>
+          <td>${l.op}</td>
+          <td>${l.dataType || "—"}</td>
+          <td>${l.platName || "—"}</td>
+          <td>${l.path || "—"}</td>
+          <td>${l.name || "—"}</td>
+          <td>${l.credit || "—"}</td>
+          <td>${l.address || "—"}</td>
+          <td>${l.station || "—"}</td>
+          <td>${l.product || "—"}</td>
+          <td>${l.tag || "—"}</td>
+          <td>${l.operator || "—"}</td>
+          <td>${l.time || "—"}</td>
+          <td class="tbl-ops"><a href="javascript:void(0)" onclick="openSubjectLogView(${i})">查看</a></td>
+        </tr>`).join("") || `<tr><td colspan="${logSpan}" class="empty">暂无记录</td></tr>`;
+        return;
+      }
+      let rows = list();
+      if (isEnt) {
+        rows = rows
+          .filter((s) => !v("q-name") || (s.name || "").includes(v("q-name")))
+          .filter((s) => !v("q-org") || s.org === v("q-org"))
+          .filter((s) => !v("q-addr") || (s.address || "").includes(v("q-addr")))
+          .filter((s) => !v("q-credit") || (s.credit || "").includes(v("q-credit")))
+          .filter((s) => !v("q-enttype") || s.entType === v("q-enttype"))
+          .filter((s) => !v("q-status") || s.bizStatus === v("q-status"))
+          .filter((s) => !v("q-legal") || (s.legal || "").includes(v("q-legal")))
+          .filter((s) => matchLib(s))
+          .filter((s) => matchTime(s.updated));
+        document.getElementById("tbody").innerHTML = rows.map((s, i) => `<tr>
+          <td>${i + 1}</td>
+          <td>${s.name}</td>
+          <td>${s.credit || "—"}</td>
+          <td>${s.org || "—"}</td>
+          <td>${s.address || "—"}</td>
+          <td>${s.entType || "—"}</td>
+          <td>${s.bizStatus || "—"}</td>
+          <td>${s.legal || "—"}</td>
+          <td>${inLibChip(s)}</td>
+          <td>${s.updated || "—"}</td>
+          <td class="tbl-ops"><a href="javascript:void(0)" onclick="openSubjectView('${s.id}')">查看</a></td>
+        </tr>`).join("") || `<tr><td colspan="11" class="empty">无匹配企业</td></tr>`;
+        return;
+      }
+      if (isLivePlat) {
+        rows = rows
+          .filter((s) => !v("q-name") || (s.name || "").includes(v("q-name")))
+          .filter((s) => !v("q-plat") || (s.platName || "").includes(v("q-plat")))
+          .filter((s) => !v("q-scope") || (s.bizScope || "").includes(v("q-scope")))
+          .filter((s) => !v("q-grade") || s.grade === v("q-grade"))
+          .filter((s) => !v("q-ptype") || s.platType === v("q-ptype"))
+          .filter((s) => !v("q-credit") || (s.credit || "").includes(v("q-credit")))
+          .filter((s) => !v("q-access") || s.accessStatus === v("q-access"))
+          .filter((s) => !v("q-tag") || (s.tag || "").includes(v("q-tag")))
+          .filter((s) => matchLib(s))
+          .filter((s) => matchTime(s.updated));
+        document.getElementById("tbody").innerHTML = rows.map((s, i) => `<tr>
+          <td><input type="checkbox" class="row-check" value="${s.id}"></td>
+          <td>${i + 1}</td>
+          <td>${s.platName || "—"}</td>
+          <td>${s.name || "—"}</td>
+          <td>${s.credit || "—"}</td>
+          <td>${s.platType || "—"}</td>
+          <td>${s.bizScope || "—"}</td>
+          <td>${s.accessStatus === "已接入" ? `<span class="chip chip-ok">已接入</span>` : (s.accessStatus || "—")}</td>
+          <td>${s.grade ? levelChip(s.grade) : "—"}</td>
+          <td>${s.tag || "—"}</td>
+          <td>${inLibChip(s)}</td>
+          <td>${s.updated || "—"}</td>
+          <td class="tbl-ops"><a href="javascript:void(0)" onclick="openSubjectView('${s.id}')">查看</a></td>
+        </tr>`).join("") || `<tr><td colspan="13" class="empty">无匹配主体</td></tr>`;
+        return;
+      }
+      if (isLiveOp) {
+        rows = rows
+          .filter((s) => !v("q-plat") || s.platName === v("q-plat"))
+          .filter((s) => !v("q-live") || (s.liveName || "").includes(v("q-live")))
+          .filter((s) => !v("q-path") || (s.path || "").includes(v("q-path")))
+          .filter((s) => !v("q-shop") || (s.shopUrl || "").includes(v("q-shop")))
+          .filter((s) => !v("q-name") || (s.name || "").includes(v("q-name")))
+          .filter((s) => !v("q-credit") || (s.credit || "").includes(v("q-credit")))
+          .filter((s) => !v("q-station") || s.station === v("q-station"))
+          .filter((s) => matchLib(s))
+          .filter((s) => matchTime(s.updated));
+        document.getElementById("tbody").innerHTML = rows.map((s, i) => `<tr>
+          <td><input type="checkbox" class="row-check" value="${s.id}"></td>
+          <td>${i + 1}</td>
+          <td>${s.platName || "—"}</td>
+          <td>${s.liveName || "—"}</td>
+          <td class="wrap">${s.path || "—"}</td>
+          <td class="wrap">${s.shopUrl || "—"}</td>
+          <td>${s.name}</td>
+          <td>${s.credit || "—"}</td>
+          <td>${s.station || "—"}</td>
+          <td>${inLibChip(s)}</td>
+          <td>${s.updated || "—"}</td>
+          <td class="tbl-ops"><a href="javascript:void(0)" onclick="openSubjectView('${s.id}')">查看</a></td>
+        </tr>`).join("") || `<tr><td colspan="12" class="empty">无匹配主体</td></tr>`;
+        return;
+      }
+      if (profile) {
+        rows = rows.filter((s) => matchProfile(s)).filter((s) => matchLib(s)).filter((s) => matchTime(s.updated));
+        document.getElementById("tbody").innerHTML = rows.map((s, i) => `<tr>
+          <td><input type="checkbox" class="row-check" value="${s.id}"></td>
+          <td>${i + 1}</td>
+          ${profileCells(s)}
+          <td>${inLibChip(s)}</td>
+          <td>${s.updated || "—"}</td>
+          <td class="tbl-ops"><a href="javascript:void(0)" onclick="openSubjectView('${s.id}')">查看</a></td>
+        </tr>`).join("") || `<tr><td colspan="${profile.cols.length + 5}" class="empty">无匹配主体</td></tr>`;
+        return;
+      }
+      rows = rows
+        .filter((s) => !v("q-dtype") || s.dataType === v("q-dtype"))
+        .filter((s) => !v("q-plat") || (s.platName || "").includes(v("q-plat")))
+        .filter((s) => !v("q-path") || (s.path || "").includes(v("q-path")))
+        .filter((s) => !v("q-name") || (s.name || "").includes(v("q-name")))
+        .filter((s) => !v("q-addr") || s.address === v("q-addr"))
+        .filter((s) => !v("q-credit") || (s.credit || "").includes(v("q-credit")))
+        .filter((s) => !v("q-station") || s.station === v("q-station"))
+        .filter((s) => !v("q-product") || fusedFieldText(s, "product").includes(v("q-product")))
+        .filter((s) => !v("q-tag") || fusedFieldText(s, "tag").includes(v("q-tag")))
+        .filter((s) => !v("q-src") || s.source === v("q-src"))
+        .filter((s) => matchLib(s))
+        .filter((s) => matchTime(s.updated));
+      document.getElementById("tbody").innerHTML = rows.map((s, i) => `<tr>
+        <td><input type="checkbox" class="row-check" value="${s.id}"></td>
+        <td>${i + 1}</td>
+        <td>${s.dataType || "—"}</td>
+        <td>${isMergeField(s.type, "platName") ? fusedFieldText(s, "platName") : (s.platName || "—")}</td>
+        <td>${s.path || "—"}</td>
+        <td>${s.name}</td>
+        <td>${s.credit || "—"}</td>
+        <td>${s.address || "—"}</td>
+        <td>${s.station || "—"}</td>
+        <td>${fusedFieldText(s, "product")}</td>
+        <td>${fusedFieldText(s, "tag")}</td>
+        <td>${inLibChip(s)}</td>
+        <td>${s.updated || "—"}</td>
+        <td class="tbl-ops"><a href="javascript:void(0)" onclick="openSubjectView('${s.id}')">查看</a></td>
+      </tr>`).join("") || `<tr><td colspan="14" class="empty">无匹配主体</td></tr>`;
+    }
+    function clearQ() {
+      document.querySelectorAll(".flt-grid input, .flt-grid select").forEach((el) => { el.value = ""; });
+      paint();
+    }
+    function exportSub() { toast("已导出（演示）"); }
+    function toggleAll(on) {
+      document.querySelectorAll(".row-check").forEach((el) => { el.checked = on; });
+    }
+    function selectedIds() {
+      return [...document.querySelectorAll(".row-check:checked")].map((el) => el.value);
+    }
+    function delSelected(batch) {
+      const ids = selectedIds();
+      if (!ids.length) return toast("请先勾选主体");
+      if (!batch && ids.length > 1) return toast("删除仅支持单条，多条请用批量删除");
+      if (!confirm("确认删除所选主体？")) return;
+      ids.forEach((id) => {
+        const s = subjectOf(id);
+        patchRow("subjects", id, { status: "已删除" });
+        if (s) pushSubjectLog(subjectLogFrom(s, "删除"));
+      });
+      toast("已删除");
+      paint();
+    }
+    function openAddSubject() {
+      if (isLiveOp) return openAddLive();
+      if (isLivePlat) return openAddLivePlat();
+      if (profile) return openAddProfile();
+      const dtypeOpts = (DATA_TYPES.length ? DATA_TYPES : ["网站"]).map((x) => `<option>${x}</option>`).join("");
+      openModal(`
+        <div class="modal adj">
+          <div class="adj-h">
+            <h3>新增主体</h3>
+            <button type="button" class="icon-btn" onclick="closeModal()"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+          <div class="adj-body">
+            <div class="kv-form">
+              <div class="kv">
+                <div class="k"><span class="req">*</span>数据类型</div>
+                <div class="v"><select id="n-dtype">${dtypeOpts}</select></div>
+                <div class="k"><span class="req">*</span>${platLabel}</div>
+                <div class="v"><input id="n-plat" placeholder="请输入"></div>
+              </div>
+              <div class="kv">
+                <div class="k"><span class="req">*</span>主要登录路径</div>
+                <div class="v"><input id="n-path" placeholder="请输入"></div>
+                <div class="k"><span class="req">*</span>主体名称</div>
+                <div class="v"><input id="n-name" placeholder="请输入"></div>
+              </div>
+              <div class="kv">
+                <div class="k"><span class="req">*</span>统一社会信用代码</div>
+                <div class="v"><input id="n-credit" placeholder="请输入"></div>
+                <div class="k">登记地址</div>
+                <div class="v"><input id="n-addr" placeholder="请输入"></div>
+              </div>
+              <div class="kv">
+                <div class="k">管辖所</div>
+                <div class="v"><input id="n-station" placeholder="请输入"></div>
+                <div class="k">平台内产品属性</div>
+                <div class="v"><input id="n-product" placeholder="请输入"></div>
+              </div>
+              <div class="kv span">
+                <div class="k">标签</div>
+                <div class="v"><input id="n-tag" placeholder="请输入"></div>
+              </div>
+            </div>
+          </div>
+          <div class="adj-foot">
+            <button type="button" class="btn-ghost" onclick="closeModal()">取消</button>
+            <button type="button" class="btn-primary" onclick="saveNewSubject()">提交</button>
+          </div>
+        </div>`);
+    }
+    function openAddProfile() {
+      const fields = profile.addFields;
+      let rows = "";
+      for (let i = 0; i < fields.length; i += 3) {
+        const slice = fields.slice(i, i + 3);
+        while (slice.length < 3) slice.push(null);
+        rows += `<div class="kv cols3">` + slice.map((f) => {
+          if (!f) return `<div class="k"></div><div class="v"></div>`;
+          const req = f.req ? `<span class="req">*</span>` : "";
+          let inner;
+          if (f.kind === "select") {
+            const opts = `<option value="">请选择</option>` + profileOpts(f).map((o) => `<option>${o}</option>`).join("");
+            inner = `<select id="n-${f.key}" ${f.onchange ? `onchange="${f.onchange}"` : ""} ${f.disabled ? "disabled" : ""}>${opts}</select>`;
+          } else {
+            inner = `<input id="n-${f.key}" placeholder="${f.placeholder || "请输入"}" ${f.disabled ? "disabled" : ""}>`;
+          }
+          const vcls = f.lookup ? "v with-btn" : "v";
+          const btn = f.lookup ? `<button type="button" class="btn-ghost" onclick="lookupStd('${f.lookup}')">查询</button>` : "";
+          return `<div class="k">${req}${f.label}</div><div class="${vcls}">${inner}${btn}</div>`;
+        }).join("") + `</div>`;
+      }
+      openModal(`
+        <div class="modal adj live-view">
+          <div class="adj-h">
+            <h3>${profile.addTitle}</h3>
+            <button type="button" class="icon-btn" onclick="closeModal()"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+          <div class="adj-body">
+            <div class="kv-form">${rows}</div>
+          </div>
+          <div class="adj-foot">
+            <button type="button" class="btn-ghost" onclick="closeModal()">关闭</button>
+            <button type="button" class="btn-primary" onclick="saveNewProfile()">提交</button>
+          </div>
+        </div>`);
+    }
+    function saveNewProfile() {
+      const miss = profile.addFields.find((f) => f.req && !v("n-" + f.key));
+      if (miss) return toast("请填写必填项");
+      if (!confirm("确认新增主体？")) return;
+      const id = "S" + Date.now().toString().slice(-6);
+      const row = {
+        id, type, dataType: profile.dataType,
+        updated: "2026.9.10", source: "人工录入", operator: "李监管", area: "鼓楼区",
+      };
+      profile.addFields.forEach((f) => { row[f.key] = v("n-" + f.key); });
+      if (!row.region && row.station) row.region = STATION_REGION[row.station] || "";
+      const s = loadState();
+      s.subjects[id] = row;
+      saveState({ subjects: s.subjects });
+      pushSubjectLog(subjectLogFrom(row, "新增"));
+      closeModal();
+      toast("已新增主体");
+      paint();
+    }
+    function fillSellerRegion() {
+      const el = document.getElementById("n-region");
+      if (el) el.value = STATION_REGION[v("n-station")] || "";
+    }
+    function openAddLivePlat() {
+      const typeOpts = `<option value="">请选择</option>` + LIVEPLAT_TYPES.map((x) => `<option>${x}</option>`).join("");
+      const accOpts = `<option value="">请选择</option>` + LIVEPLAT_ACCESS.map((x) => `<option>${x}</option>`).join("");
+      const gOpts = `<option value="">请选择</option>` + LIVEPLAT_GRADES.map((x) => `<option>${x}</option>`).join("");
+      openModal(`
+        <div class="modal adj live-view">
+          <div class="adj-h">
+            <h3>新增直播平台主体</h3>
+            <button type="button" class="icon-btn" onclick="closeModal()"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+          <div class="adj-body">
+            <div class="kv-form">
+              <div class="kv cols3">
+                <div class="k"><span class="req">*</span>平台名称</div>
+                <div class="v"><input id="n-plat" placeholder="请输入"></div>
+                <div class="k"><span class="req">*</span>运营主体名称</div>
+                <div class="v"><input id="n-name" placeholder="请输入"></div>
+                <div class="k"><span class="req">*</span>统一社会信用代码</div>
+                <div class="v"><input id="n-credit" placeholder="请输入"></div>
+              </div>
+              <div class="kv cols3">
+                <div class="k"><span class="req">*</span>平台类型</div>
+                <div class="v"><select id="n-ptype">${typeOpts}</select></div>
+                <div class="k">主要业务范围</div>
+                <div class="v"><input id="n-scope" placeholder="请输入"></div>
+                <div class="k"><span class="req">*</span>接入状态</div>
+                <div class="v"><select id="n-access">${accOpts}</select></div>
+              </div>
+              <div class="kv cols3">
+                <div class="k">分类等级</div>
+                <div class="v"><select id="n-grade">${gOpts}</select></div>
+                <div class="k">主体标签</div>
+                <div class="v"><input id="n-tag" placeholder="请输入"></div>
+                <div class="k"></div>
+                <div class="v"></div>
+              </div>
+            </div>
+          </div>
+          <div class="adj-foot">
+            <button type="button" class="btn-ghost" onclick="closeModal()">取消</button>
+            <button type="button" class="btn-primary" onclick="saveNewLivePlat()">提交</button>
+          </div>
+        </div>`);
+    }
+    function saveNewLivePlat() {
+      if (!v("n-plat") || !v("n-name") || !v("n-credit") || !v("n-ptype") || !v("n-access")) {
+        return toast("请填写必填项");
+      }
+      if (!confirm("确认新增直播平台主体？")) return;
+      const id = "S" + Date.now().toString().slice(-6);
+      const row = {
+        id, type, dataType: "直播平台",
+        platName: v("n-plat"), name: v("n-name"), credit: v("n-credit"),
+        platType: v("n-ptype"), bizScope: v("n-scope"), accessStatus: v("n-access"),
+        grade: v("n-grade"), tag: v("n-tag"),
+        updated: "2026.9.10", source: "人工录入", operator: "李监管", area: "鼓楼区",
+      };
+      const s = loadState();
+      s.subjects[id] = row;
+      saveState({ subjects: s.subjects });
+      pushSubjectLog(subjectLogFrom(row, "新增"));
+      closeModal();
+      toast("已新增主体");
+      paint();
+    }
+    function openAddLive() {
+      const platOpts = `<option value="">请选择</option>` + LIVE_PLATS.map((x) => `<option>${x}</option>`).join("");
+      const stOpts = `<option value="">请选择</option>` + (STATIONS.length ? STATIONS : LIVE_STATIONS).map((x) => `<option>${x}</option>`).join("");
+      const yn = `<option value="">请选择</option><option>是</option><option>否</option>`;
+      openModal(`
+        <div class="modal adj live-view">
+          <div class="adj-h">
+            <h3>新增直播间运营者主体</h3>
+            <button type="button" class="icon-btn" onclick="closeModal()"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+          <div class="adj-body">
+            <div class="kv-form">
+              <div class="kv cols3">
+                <div class="k"><span class="req">*</span>所属平台</div>
+                <div class="v"><select id="n-plat">${platOpts}</select></div>
+                <div class="k"><span class="req">*</span>直播间名称</div>
+                <div class="v"><input id="n-live" placeholder="请输入"></div>
+                <div class="k"><span class="req">*</span>直播间地址</div>
+                <div class="v"><input id="n-path" placeholder="请输入"></div>
+              </div>
+              <div class="kv cols3">
+                <div class="k"><span class="req">*</span>关联网店地址</div>
+                <div class="v"><input id="n-shop" placeholder="请输入"></div>
+                <div class="k"><span class="req">*</span>主体名称</div>
+                <div class="v with-btn"><input id="n-name" placeholder="请输入"><button type="button" class="btn-ghost" onclick="lookupStd('name')">查询</button></div>
+                <div class="k">统一社会信用代码</div>
+                <div class="v with-btn"><input id="n-credit" placeholder="请输入"><button type="button" class="btn-ghost" onclick="lookupStd('credit')">查询</button></div>
+              </div>
+              <div class="kv cols3">
+                <div class="k">登记地址</div>
+                <div class="v"><input id="n-addr" placeholder="请输入"></div>
+                <div class="k">管辖所</div>
+                <div class="v"><select id="n-station" onchange="fillLiveRegion()">${stOpts}</select></div>
+                <div class="k">所在区域</div>
+                <div class="v"><input id="n-region" disabled placeholder="根据管辖所自动回填"></div>
+              </div>
+              <div class="kv cols3">
+                <div class="k">经营产品类别</div>
+                <div class="v"><input id="n-product" placeholder="请输入"></div>
+                <div class="k">是否为本地产品</div>
+                <div class="v"><select id="n-localp">${yn}</select></div>
+                <div class="k">粉丝数量</div>
+                <div class="v"><input id="n-fans" placeholder="请输入"></div>
+              </div>
+              <div class="kv cols3">
+                <div class="k"><span class="req">*</span>是否带货</div>
+                <div class="v"><select id="n-sell">${yn}</select></div>
+                <div class="k">行政处罚数量</div>
+                <div class="v"><input id="n-penalty" placeholder="请输入"></div>
+                <div class="k">经营异常情况</div>
+                <div class="v"><input id="n-abn" placeholder="请输入"></div>
+              </div>
+              <div class="kv cols3">
+                <div class="k"><span class="req">*</span>是否为本地直播平台</div>
+                <div class="v"><select id="n-localplat">${yn}</select></div>
+                <div class="k">业务子库</div>
+                <div class="v"><input id="n-tag" placeholder="如：茶叶；食品"></div>
+                <div class="k"></div>
+                <div class="v"></div>
+              </div>
+            </div>
+          </div>
+          <div class="adj-foot">
+            <button type="button" class="btn-ghost" onclick="closeModal()">取消</button>
+            <button type="button" class="btn-primary" onclick="saveNewLive()">提交</button>
+          </div>
+        </div>`);
+    }
+    function fillLiveRegion() {
+      const el = document.getElementById("n-region");
+      if (el) el.value = STATION_REGION[v("n-station")] || "";
+    }
+    function lookupStd(kind) {
+      const q = kind === "name" ? v("n-name") : v("n-credit");
+      if (!q) return toast("请先填写再查询");
+      const hit = subjects().find((s) => s.type === "ent" && (
+        kind === "name" ? (s.name || "").includes(q) : (s.credit || "").includes(q)
+      ));
+      if (hit) {
+        const set = (id, val) => { const el = document.getElementById(id); if (el && val) el.value = val; };
+        set("n-name", hit.name);
+        set("n-credit", hit.credit || "");
+        set("n-addr", hit.address || "");
+        set("n-address", hit.address || "");
+        set("n-org", hit.org || "");
+        set("n-entType", hit.entType || "");
+        set("n-companyType", hit.entType || hit.companyType || "");
+        set("n-district", subjectRegion(hit));
+        toast("已从市监标准库带出主体信息");
+      } else {
+        toast("未在市监标准库中检索到");
+      }
+    }
+    function saveNewLive() {
+      if (!v("n-plat") || !v("n-live") || !v("n-path") || !v("n-shop") || !v("n-name") || !v("n-localplat") || !v("n-sell")) {
+        return toast("请填写必填项");
+      }
+      if (!confirm("确认新增直播间运营者主体？")) return;
+      const id = "S" + Date.now().toString().slice(-6);
+      const row = {
+        id, type, dataType: "直播间运营者",
+        platName: v("n-plat"), liveName: v("n-live"), path: v("n-path"), shopUrl: v("n-shop"),
+        name: v("n-name"), credit: v("n-credit"), address: v("n-addr"),
+        station: v("n-station"), region: v("n-region") || STATION_REGION[v("n-station")] || "",
+        product: v("n-product"), localProduct: v("n-localp"), fans: v("n-fans"), sellGoods: v("n-sell"),
+        penalty: v("n-penalty"), abnormal: v("n-abn"), localPlat: v("n-localplat"),
+        tag: v("n-tag"),
+        updated: "2026.9.10", source: "人工录入", operator: "李监管", area: "鼓楼区",
+      };
+      const s = loadState();
+      s.subjects[id] = row;
+      saveState({ subjects: s.subjects });
+      pushSubjectLog(subjectLogFrom(row, "新增"));
+      closeModal();
+      toast("已新增主体");
+      paint();
+    }
+    function saveNewSubject() {
+      const plat = (document.getElementById("n-plat").value || "").trim();
+      const name = (document.getElementById("n-name").value || "").trim();
+      const path = (document.getElementById("n-path").value || "").trim();
+      const credit = (document.getElementById("n-credit").value || "").trim();
+      if (!plat || !name || !path || !credit) return toast("请填写必填项");
+      const id = "S" + Date.now().toString().slice(-6);
+      const row = {
+        id, type, dataType: document.getElementById("n-dtype").value,
+        platName: plat, name, path, credit,
+        address: (document.getElementById("n-addr").value || "").trim(),
+        station: (document.getElementById("n-station").value || "").trim(),
+        product: (document.getElementById("n-product").value || "").trim(),
+        tag: (document.getElementById("n-tag").value || "").trim(),
+        updated: "2026.9.10", source: "人工录入", operator: "李监管", area: "鼓楼区",
+      };
+      const s = loadState();
+      s.subjects[id] = row;
+      saveState({ subjects: s.subjects });
+      pushSubjectLog(subjectLogFrom(row, "新增"));
+      closeModal();
+      toast("已新增主体");
+      paint();
+    }
+    function openBatchAdd() {
+      openModal(`
+        <div class="modal">
+          <div class="adj-h" style="padding:0 0 12px;border:0">
+            <h3>批量新增主体</h3>
+            <button type="button" class="icon-btn" onclick="closeModal()"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+          <p class="sub">${isLiveOp ? "下载模板填写后导入。重复直播间地址将按去重规则覆盖。" : "下载模板填写后导入。重复主要登录路径将按去重规则覆盖。"}</p>
+          <div class="actions" style="margin-top:12px">
+            <button type="button" class="btn-ghost" onclick="toast('已下载模板（演示）')">下载模板</button>
+            <button type="button" class="btn-primary" onclick="toast('已导入（演示）');closeModal()">导入</button>
+          </div>
+        </div>`);
+    }
+    function openSubjectLogView(i) {
+      const l = (window.__subLogs || [])[i];
+      if (!l) return;
+      const body = isLivePlat ? `
+              <div class="kv">
+                <div class="k">变动类型</div><div class="v">${l.op}</div>
+                <div class="k">平台名称</div><div class="v">${l.platName || "—"}</div>
+              </div>
+              <div class="kv">
+                <div class="k">运营主体名称</div><div class="v">${l.name || "—"}</div>
+                <div class="k">统一社会信用代码</div><div class="v">${l.credit || "—"}</div>
+              </div>
+              <div class="kv">
+                <div class="k">平台类型</div><div class="v">${l.platType || "—"}</div>
+                <div class="k">主要业务范围</div><div class="v">${l.bizScope || "—"}</div>
+              </div>
+              <div class="kv">
+                <div class="k">接入状态</div><div class="v">${l.accessStatus || "—"}</div>
+                <div class="k">分类等级</div><div class="v">${l.grade || "—"}</div>
+              </div>
+              <div class="kv">
+                <div class="k">主体标签</div><div class="v">${l.tag || "—"}</div>
+                <div class="k"></div><div class="v"></div>
+              </div>` : isLiveOp ? `
+              <div class="kv">
+                <div class="k">变动类型</div><div class="v">${l.op}</div>
+                <div class="k">所属平台</div><div class="v">${l.platName || "—"}</div>
+              </div>
+              <div class="kv">
+                <div class="k">直播间名称</div><div class="v">${l.liveName || "—"}</div>
+                <div class="k">直播间地址</div><div class="v">${l.path || "—"}</div>
+              </div>
+              <div class="kv">
+                <div class="k">关联网店地址</div><div class="v">${l.shopUrl || "—"}</div>
+                <div class="k">主体名称</div><div class="v">${l.name || "—"}</div>
+              </div>
+              <div class="kv">
+                <div class="k">统一社会信用代码</div><div class="v">${l.credit || "—"}</div>
+                <div class="k">管辖所</div><div class="v">${l.station || "—"}</div>
+              </div>
+              <div class="kv">
+                <div class="k">是否在市监标准库</div><div class="v">${l.inStdLib || "—"}</div>
+                <div class="k">粉丝数量</div><div class="v">${l.fans || "—"}</div>
+              </div>
+              <div class="kv">
+                <div class="k">是否带货</div><div class="v">${l.sellGoods || "—"}</div>
+                <div class="k"></div><div class="v"></div>
+              </div>` : profile ? (() => {
+                const pairs = [{ k: "变动类型", v: l.op }].concat(profile.addFields.map((f) => ({ k: f.label, v: l[f.key] || "—" })));
+                let html = "";
+                for (let i = 0; i < pairs.length; i += 2) {
+                  const a = pairs[i];
+                  const b = pairs[i + 1];
+                  html += `<div class="kv">
+                <div class="k">${a.k}</div><div class="v">${a.v}</div>
+                <div class="k">${b ? b.k : ""}</div><div class="v">${b ? b.v : ""}</div>
+              </div>`;
+                }
+                return html;
+              })() : `
+              <div class="kv">
+                <div class="k">变动类型</div><div class="v">${l.op}</div>
+                <div class="k">数据类型</div><div class="v">${l.dataType || "—"}</div>
+              </div>
+              <div class="kv">
+                <div class="k">${platLabel}</div><div class="v">${l.platName || "—"}</div>
+                <div class="k">主要登录路径</div><div class="v">${l.path || "—"}</div>
+              </div>
+              <div class="kv">
+                <div class="k">主体名称</div><div class="v">${l.name || "—"}</div>
+                <div class="k">统一社会信用代码</div><div class="v">${l.credit || "—"}</div>
+              </div>
+              <div class="kv">
+                <div class="k">登记地址</div><div class="v">${l.address || "—"}</div>
+                <div class="k">管辖所</div><div class="v">${l.station || "—"}</div>
+              </div>
+              <div class="kv">
+                <div class="k">平台内产品属性</div><div class="v">${l.product || "—"}</div>
+                <div class="k">标签</div><div class="v">${l.tag || "—"}</div>
+              </div>`;
+      openModal(`
+        <div class="modal adj">
+          <div class="adj-h">
+            <h3>查看</h3>
+            <button type="button" class="icon-btn" onclick="closeModal()"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+          <div class="adj-body">
+            <div class="kv-form">
+              ${body}
+              <div class="kv">
+                <div class="k">操作人员</div><div class="v">${l.operator || "—"}</div>
+                <div class="k">操作时间</div><div class="v">${l.time || "—"}</div>
+              </div>
+            </div>
+          </div>
+          <div class="adj-foot">
+            <button type="button" class="btn-ghost" onclick="closeModal()">关闭</button>
+          </div>
+        </div>`);
+    }
+    window.setTab = setTab;
+    window.clearQ = clearQ;
+    window.paint = paint;
+    window.exportSub = exportSub;
+    window.toggleAll = toggleAll;
+    window.delSelected = delSelected;
+    window.openAddSubject = openAddSubject;
+    window.saveNewSubject = saveNewSubject;
+    window.saveNewLivePlat = saveNewLivePlat;
+    window.saveNewLive = saveNewLive;
+    window.lookupStd = lookupStd;
+    window.fillLiveRegion = fillLiveRegion;
+    window.saveNewProfile = saveNewProfile;
+    window.fillSellerRegion = fillSellerRegion;
+    window.openBatchAdd = openBatchAdd;
+    window.openSubjectLogView = openSubjectLogView;
+    paint();
+    if (qs("add") === "1") openAddSubject();
+  </script>
+</body>
+</html>

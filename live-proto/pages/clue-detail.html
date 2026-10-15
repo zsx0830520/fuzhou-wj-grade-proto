@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>线索详情 · 福州网监直播采集</title>
+  <link rel="stylesheet" href="../../assets/vendor/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="../assets/app.css">
+</head>
+<body>
+  <div class="app" id="app"></div>
+  <script src="../assets/common.js?v=6"></script>
+  <script>
+    const clue = getClue(qs("id")) || getCluesMerged()[0];
+    const room = getRoom(clue.roomId);
+    const clip = getClip(clue.clipId);
+
+    function paint() {
+      const c = getClue(clue.id);
+      document.getElementById("app").innerHTML = shellStart("regular") + `
+        <p class="muted" style="margin:0 0 12px"><a class="linkish" href="room-detail.html?id=${room.id}">${room.name}</a> / ${c.id}</p>
+        <section class="card">
+          <div class="row-between" style="align-items:flex-start">
+            <div>
+              <h2>${c.type}</h2>
+              <p class="sub">${c.id} · ${c.time}</p>
+            </div>
+            <div class="actions" style="margin:0">
+              ${clueStatusChip(c)}
+              ${cluePending(c) ? `<button class="btn-go" onclick="doTransferClue('${c.id}')">转处置</button>` : ""}
+              ${cluePending(c) ? `<button class="btn-ghost" onclick="doReviewClue('${c.id}')">已查阅</button>` : ""}
+            </div>
+          </div>
+        </section>
+        <div class="clue-hero block">
+          <section class="card">
+            <h2>多模态研判</h2>
+            <p class="sub">图像识别 + 语音转文本 + 融合判断（模拟字段）</p>
+            <div class="panel">
+              <h3>图像识别</h3>
+              <p>${c.vision}</p>
+            </div>
+            <div class="panel" style="margin-top:10px">
+              <h3>语音转文本（ASR）</h3>
+              <p>「${c.asr}」</p>
+              <div class="words" style="margin-top:8px">${c.words.map(w => `<span class="word">${w}</span>`).join("")}</div>
+            </div>
+            <div class="panel" style="margin-top:10px">
+              <h3>融合结论</h3>
+              <p>${c.fusion}</p>
+              <div class="words" style="margin-top:8px">${c.scenes.map(w => `<span class="chip chip-b">${w}</span>`).join("")}</div>
+            </div>
+          </section>
+          <section class="card">
+            <h2>关联对象</h2>
+            <dl class="dl" style="margin-top:12px">
+              <dt>直播间</dt><dd><a class="linkish" href="room-detail.html?id=${room.id}">${room.name}</a></dd>
+              <dt>主体</dt><dd>${room.subject}</dd>
+              <dt>信用代码</dt><dd>${room.credit}</dd>
+              <dt>管辖所</dt><dd>${room.station}</dd>
+              <dt>关联切片</dt><dd>${clip ? `<a class="linkish" href="javascript:openPlayer('${clip.id}')">${clip.id}</a>` : (c.clipId + "（已删除）")}</dd>
+            </dl>
+            ${clip ? `<div class="clip" style="margin-top:16px">
+              <img src="${clip.cover}" alt="">
+              <div class="bd">
+                <h4>${clip.id} · ${clip.dur}</h4>
+                <div class="muted">${clip.start}</div>
+                <div class="clip-ops">
+                  <button class="btn-primary" onclick="openPlayer('${clip.id}')">播放切片</button>
+                </div>
+              </div>
+            </div>` : ""}
+          </section>
+        </div>
+      ` + shellEnd();
+      document.getElementById("crumb").textContent = "线索详情";
+    }
+    window.onClueChanged = paint;
+    paint();
+  </script>
+</body>
+</html>

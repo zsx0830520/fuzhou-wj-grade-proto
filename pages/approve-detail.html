@@ -1,0 +1,29 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>审批详情 · 网监分级分类</title>
+  <link rel="stylesheet" href="../assets/vendor/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="../assets/app.css?v=33">
+</head>
+<body>
+  <div class="app" id="app"></div>
+  <script src="../assets/common.js?v=41"></script>
+  <script>
+    const a = approvalOf(qs("id"));
+    const canDo = a && a.canHandle && a.status === "待办理";
+    document.getElementById("app").innerHTML = shellStart() + (a ? `
+      <section class="card">
+        <h2>${canDo ? "办理" : "查看"}</h2>
+        ${renderApproveViewInner(a, { handle: canDo })}
+        <div class="actions">
+          <a class="btn-ghost" href="${page("approve.html")}?tab=${a.status === "待办理" ? "todo" : "done"}">${canDo ? "取消" : "关闭"}</a>
+          ${canDo ? `<button type="button" class="btn-primary" onclick="window.__handleId='${a.id}';submitApproveHandle()">提交</button>` : ""}
+        </div>
+      </section>
+    ` : `<section class="card"><p class="empty">未找到该审批</p></section>`) + shellEnd();
+    document.getElementById("crumb").textContent = a ? "分级分类结果 / 调级审批 / " + (canDo ? "办理" : "查看") : "分级分类结果 / 调级审批";
+  </script>
+</body>
+</html>

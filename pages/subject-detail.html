@@ -1,0 +1,28 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>主体详情 · 网监分级分类</title>
+  <link rel="stylesheet" href="../assets/vendor/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="../assets/app.css?v=33">
+</head>
+<body>
+  <div class="app" id="app"></div>
+  <script src="../assets/common.js?v=41"></script>
+  <script>
+    const s = subjectOf(qs("id"));
+    document.getElementById("app").innerHTML = shellStart() + (s ? `
+      <section class="card">
+        <p class="sub">主体详情已在弹窗中打开。关闭弹窗后可返回列表。</p>
+        <div class="actions">
+          <a class="btn-ghost" href="${page("subjects.html")}?type=${s.type}">返回主体废</a>
+          <button type="button" class="btn-primary" onclick="openSubjectView('${s.id}')">查看</button>
+        </div>
+      </section>
+    ` : `<section class="card"><p class="empty">未找到该主体</p></section>`) + shellEnd();
+    document.getElementById("crumb").textContent = s ? "主体库 / 查看" : "主体库";
+    if (s) openSubjectView(s.id);
+  </script>
+</body>
+</html>

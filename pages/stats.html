@@ -1,0 +1,278 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>统计分析 · 网监分级分类</title>
+  <script src="../assets/vendor/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="../assets/vendor/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="../assets/app.css?v=33">
+</head>
+<body>
+  <div class="app" id="app"></div>
+  <script src="../assets/common.js?v=41"></script>
+  <script>
+    const CITIES = ["福州", "厦门", "泉州", "漳州", "宁德", "莆田", "龙岩", "三明", "南平", "平潭"];
+    const SUBJ_PLAT = [110, 331, 82, 348, 108, 332, 80, 350, 112, 18];
+    const SUBJ_SELL = [42, 210, 48, 228, 68, 212, 52, 230, 70, 12];
+    const SUBJ_LIVEPLAT = [12, 22, 9, 18, 8, 16, 7, 14, 10, 3];
+    const SUBJ_LIVE = [36, 92, 40, 88, 34, 90, 38, 86, 42, 8];
+    const SUBJ_OTH = [58, 72, 40, 70, 38, 148, 40, 158, 42, 8];
+    const CLUE_DONE = [42, 221, 48, 238, 88, 212, 86, 230, 78, 14];
+    const CLUE_WAIT = [78, 82, 40, 162, 48, 148, 50, 158, 42, 22];
+    const MONTHS = ["2026-01", "2026-02", "2026-03", "2026-04", "2026-05", "2026-06", "2026-07", "2026-08", "2026-09"];
+    const DISTRICTS = {
+      福州: ["鼓楼区", "台江区", "仓山区", "晋安区", "马尾区", "长乐区", "闽侯县", "连江县", "罗源县", "闽清县", "永泰县"],
+      厦门: ["思明区", "湖里区", "集美区", "海沧区", "同安区", "翔安区"],
+      泉州: ["鲤城区", "丰泽区", "洛江区", "泉港区", "石狮市", "晋江市", "南安市", "惠安县", "安溪县", "永春县", "德化县"],
+      漳州: ["芗城区", "龙文区", "龙海区", "长泰区", "漳浦县", "云霄县", "东山县", "诏安县", "南靖县", "平和县", "华安县"],
+      宁德: ["蕉城区", "福安市", "福鼎市", "霞浦县", "古田县", "屏南县", "寿宁县", "周宁县", "柘荣县"],
+      莆田: ["城厢区", "涵江区", "荔城区", "秀屿区", "仙游县"],
+      龙岩: ["新罗区", "永定区", "漳平市", "长汀县", "上杭县", "武平县", "连城县"],
+      三明: ["三元区", "沙县区", "永安市", "明溪县", "清流县", "宁化县", "大田县", "尤溪县", "将乐县", "泰宁县", "建宁县"],
+      南平: ["延平区", "建阳区", "邵武市", "武夷山市", "建瓯市", "顺昌县", "浦城县", "光泽县", "松溪县", "政和县"],
+      平潭: ["潭城镇", "苏澳镇", "流水镇", "澳前镇", "北厝镇", "平原镇"],
+    };
+    const KPI = { plat: 31451, sell: 31451, liveplat: 128, live: 12451, oth: 31451, web: 323, mp: 11451, mini: 311, app: 451 };
+
+    function monthOpts() {
+      return `<option value="">请选择</option>` + MONTHS.map((m) => `<option>${m}</option>`).join("");
+    }
+    function splitN(total, n, salt) {
+      const raw = Array.from({ length: n }, (_, i) => ((i * 7 + salt * 5) % 13) + 4);
+      const sum = raw.reduce((a, b) => a + b, 0);
+      const vals = raw.map((r) => Math.round(total * r / sum));
+      vals[0] += total - vals.reduce((a, b) => a + b, 0);
+      return vals.map((v) => Math.max(0, v));
+    }
+    function cityIndex(name) { return CITIES.indexOf(name); }
+
+    document.getElementById("app").innerHTML = shellStart() + `
+      <div class="stats-toolbar">
+        <div class="time">
+          <span>时间</span>
+          <select id="t-from">${monthOpts()}</select>
+          <select id="t-to">${monthOpts()}</select>
+        </div>
+        <aside class="clue-tip">主体数量不随时间变动。点击柱状图可下钻到区县。</aside>
+      </div>
+      <div class="kpi-hero" id="kpi"></div>
+      <section class="card chart-card">
+        <div class="chart-h">
+          <h2 class="sec-h" id="tit-subj">主体地域分布</h2>
+          <div class="drill-path" id="path-subj"></div>
+        </div>
+        <div class="chart-box"><canvas id="chart-subj"></canvas></div>
+      </section>
+      <div class="rate-row" id="rates"></div>
+      <section class="card chart-card">
+        <div class="chart-h">
+          <h2 class="sec-h" id="tit-clue">线索处置情况地域分布</h2>
+          <div class="drill-path" id="path-clue"></div>
+        </div>
+        <div class="chart-box"><canvas id="chart-clue"></canvas></div>
+      </section>
+    ` + shellEnd();
+    document.getElementById("crumb").textContent = "统计分析";
+    const pageEl = document.querySelector(".page");
+    if (pageEl) pageEl.classList.add("wide");
+
+    let city = "";
+    const ratesBase = [
+      { icon: "fa-file-export", n: 19, unit: "条", lab: "已处置线索" },
+      { icon: "fa-file-lines", n: 19, unit: "条", lab: "未处置线索" },
+      { icon: "fa-clock", n: 19, unit: "%", lab: "线索处置及时率" },
+      { icon: "fa-scale-balanced", n: 19, unit: "条", lab: "线索立案数" },
+      { icon: "fa-chart-pie", n: 19, unit: "%", lab: "线索立案率" },
+      { icon: "fa-clipboard-check", n: 19, unit: "%", lab: "检查任务及时完成率" },
+    ];
+
+    function timeK() {
+      const from = (document.getElementById("t-from") || {}).value || "";
+      return from ? 1 + (MONTHS.indexOf(from) % 4) * 0.04 : 1;
+    }
+    function regionShare() {
+      if (!city) return 1;
+      const i = cityIndex(city);
+      const tot = SUBJ_PLAT.reduce((a, b) => a + b, 0);
+      return tot ? SUBJ_PLAT[i] / tot : 1;
+    }
+    function paintKpi() {
+      const s = regionShare();
+      const n = (v) => Math.max(1, Math.round(v * s));
+      document.getElementById("kpi").innerHTML = `
+        <div class="box">
+          <div class="lab">电商平台主体</div>
+          <div class="num">${n(KPI.plat)}<em>家</em></div>
+        </div>
+        <div class="box">
+          <div class="lab">电商平台内经营者主体</div>
+          <div class="num">${n(KPI.sell)}<em>家</em></div>
+        </div>
+        <div class="box">
+          <div class="lab">直播平台主体</div>
+          <div class="num">${n(KPI.liveplat)}<em>家</em></div>
+        </div>
+        <div class="box">
+          <div class="lab">直播间运营者主体</div>
+          <div class="num">${n(KPI.live)}<em>家</em></div>
+        </div>
+        <div class="box split">
+          <div class="core">
+            <div class="lab">其他网络经营主体</div>
+            <div class="num">${n(KPI.oth)}<em>家</em></div>
+          </div>
+          <i class="fa-solid fa-play chev"></i>
+          <div class="subs">
+            <div><div class="lab">网站</div><div class="num">${n(KPI.web)}<em>家</em></div></div>
+            <div><div class="lab">公众号</div><div class="num">${n(KPI.mp)}<em>家</em></div></div>
+            <div><div class="lab">小程序</div><div class="num">${n(KPI.mini)}<em>个</em></div></div>
+            <div><div class="lab">APP</div><div class="num">${n(KPI.app)}<em>个</em></div></div>
+          </div>
+        </div>`;
+    }
+    function paintRates() {
+      const bump = timeK() === 1 ? 0 : Math.round((timeK() - 1) * 50);
+      const s = regionShare();
+      document.getElementById("rates").innerHTML = ratesBase.map((r) => {
+        const n = r.unit === "%" ? r.n : Math.max(1, Math.round((r.n + bump) * s));
+        return `<div class="rate-item">
+          <i class="fa-solid ${r.icon}"></i>
+          <div class="n">${n}<em>${r.unit}</em></div>
+          <div class="l">${r.lab}</div>
+        </div>`;
+      }).join("");
+    }
+    function paintPath() {
+      const place = city === "平潭" ? "平潭" : city + "市";
+      const html = city
+        ? `<a href="javascript:void(0)" onclick="drillUp()">福建省</a> / ${place}`
+        : `福建省<span class="hint">（点击柱状图下钻）</span>`;
+      document.getElementById("path-subj").innerHTML = html;
+      document.getElementById("path-clue").innerHTML = html;
+      document.getElementById("tit-subj").textContent = city ? `主体地域分布（${place}）` : "主体地域分布";
+      document.getElementById("tit-clue").textContent = city ? `线索处置情况地域分布（${place}）` : "线索处置情况地域分布";
+    }
+
+    const font = { family: "Microsoft YaHei, PingFang SC, sans-serif", size: 12 };
+    Chart.defaults.font.family = font.family;
+    Chart.defaults.font.size = 12;
+    Chart.defaults.color = "#5c6b7f";
+
+    function onChartClick(evt, chart) {
+      const pts = chart.getElementsAtEventForMode(evt, "index", { intersect: false }, true);
+      if (!pts.length) return;
+      const label = chart.data.labels[pts[0].index];
+      if (city) return toast("已到区县，点击「福建省」返回");
+      drillTo(label);
+    }
+    function barOpts(chartRef) {
+      return {
+        responsive: true,
+        maintainAspectRatio: false,
+        onClick: (evt) => onChartClick(evt, chartRef.current),
+        onHover: (evt, els) => { evt.native.target.style.cursor = els.length ? "pointer" : "default"; },
+        plugins: {
+          legend: { position: "top", align: "end", labels: { boxWidth: 10, font } },
+        },
+        scales: {
+          x: { grid: { display: false }, ticks: { font, maxRotation: 0 } },
+          y: { beginAtZero: true, grid: { color: "#e8eef6" }, ticks: { font } },
+        },
+      };
+    }
+
+    const subjRef = { current: null };
+    const clueRef = { current: null };
+    subjRef.current = new Chart(document.getElementById("chart-subj"), {
+      type: "bar",
+      data: {
+        labels: CITIES.slice(),
+        datasets: [
+          { label: "电商平台主体", data: SUBJ_PLAT.slice(), backgroundColor: "#c9b08a" },
+          { label: "电商平台内经营者主体", data: SUBJ_SELL.slice(), backgroundColor: "#3d7ec4" },
+          { label: "直播平台主体", data: SUBJ_LIVEPLAT.slice(), backgroundColor: "#6b8fbf" },
+          { label: "直播间运营者主体", data: SUBJ_LIVE.slice(), backgroundColor: "#d47a6a" },
+          { label: "其他网络经营主体", data: SUBJ_OTH.slice(), backgroundColor: "#8cbc7a" },
+        ],
+      },
+      options: barOpts(subjRef),
+    });
+    clueRef.current = new Chart(document.getElementById("chart-clue"), {
+      type: "bar",
+      data: {
+        labels: CITIES.slice(),
+        datasets: [
+          { label: "已处置", data: CLUE_DONE.slice(), backgroundColor: "#4a90d9" },
+          { label: "未处置", data: CLUE_WAIT.slice(), backgroundColor: "#e0a05a" },
+        ],
+      },
+      options: barOpts(clueRef),
+    });
+
+    function currentSlice() {
+      const k = timeK();
+      if (!city) {
+        return {
+          labels: CITIES,
+          plat: SUBJ_PLAT,
+          sell: SUBJ_SELL,
+          liveplat: SUBJ_LIVEPLAT,
+          live: SUBJ_LIVE,
+          oth: SUBJ_OTH,
+          done: CLUE_DONE.map((n) => Math.round(n * k)),
+          wait: CLUE_WAIT.map((n) => Math.round(n * k)),
+        };
+      }
+      const i = cityIndex(city);
+      const names = DISTRICTS[city] || [];
+      return {
+        labels: names,
+        plat: splitN(SUBJ_PLAT[i], names.length, i + 1),
+        sell: splitN(SUBJ_SELL[i], names.length, i + 2),
+        liveplat: splitN(SUBJ_LIVEPLAT[i], names.length, i + 6),
+        live: splitN(SUBJ_LIVE[i], names.length, i + 7),
+        oth: splitN(SUBJ_OTH[i], names.length, i + 3),
+        done: splitN(Math.round(CLUE_DONE[i] * k), names.length, i + 4),
+        wait: splitN(Math.round(CLUE_WAIT[i] * k), names.length, i + 5),
+      };
+    }
+    function paintCharts() {
+      const d = currentSlice();
+      subjRef.current.data.labels = d.labels;
+      subjRef.current.data.datasets[0].data = d.plat;
+      subjRef.current.data.datasets[1].data = d.sell;
+      subjRef.current.data.datasets[2].data = d.liveplat;
+      subjRef.current.data.datasets[3].data = d.live;
+      subjRef.current.data.datasets[4].data = d.oth;
+      subjRef.current.update();
+      clueRef.current.data.labels = d.labels;
+      clueRef.current.data.datasets[0].data = d.done;
+      clueRef.current.data.datasets[1].data = d.wait;
+      clueRef.current.update();
+    }
+    function drillTo(name) {
+      if (!DISTRICTS[name]) return;
+      city = name;
+      paintAll();
+    }
+    function drillUp() {
+      city = "";
+      paintAll();
+    }
+    function paintAll() {
+      paintPath();
+      paintKpi();
+      paintRates();
+      paintCharts();
+    }
+    function onTime() { paintRates(); paintCharts(); }
+
+    window.drillTo = drillTo;
+    window.drillUp = drillUp;
+    document.getElementById("t-from").addEventListener("change", onTime);
+    document.getElementById("t-to").addEventListener("change", onTime);
+    paintAll();
+  </script>
+</body>
+</html>

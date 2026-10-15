@@ -1,0 +1,104 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>导入结果 · 网监分级分类</title>
+  <link rel="stylesheet" href="../assets/vendor/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="../assets/app.css?v=33">
+</head>
+<body>
+  <div class="app" id="app"></div>
+  <script src="../assets/common.js?v=41"></script>
+  <script>
+    const t = specialApplies().find((x) => x.id === qs("id"));
+    function kv3(k1, v1, k2, v2, k3, v3) {
+      return `<div class="kv cols3">
+        <div class="k">${k1}</div><div class="v">${v1}</div>
+        <div class="k">${k2}</div><div class="v">${v2}</div>
+        <div class="k">${k3}</div><div class="v">${v3}</div>
+      </div>`;
+    }
+    const body = t ? `
+      <section class="card special-import">
+        <h2 class="sec-h">专项监测信息</h2>
+        <div class="kv-form">
+          ${kv3("监测任务名称", t.name, "任务类型", t.type, "完成期限", fmtDotDate(t.deadline))}
+          ${kv3("监测需求描述", t.desc || "—", "子库标签", t.tag || "—", "申请人", t.applicant || "—")}
+          ${kv3("申请时间", fmtDotDate(t.applied), "是否完成", t.done, "申请部门", t.dept || "—")}
+        </div>
+        <h2 class="sec-h block-gap">专项监测结果</h2>
+        <div class="import-guide">
+          <span>请下载模版，根据模板内容完善信息后，再进行文件上传</span>
+          <button type="button" class="btn-ghost" onclick="toast('已下载模板（演示）')">下载模板</button>
+        </div>
+        <div class="import-split">
+          <div class="main">
+            <div class="upload-zone" id="zone"></div>
+            <input id="file" type="file" accept=".xlsx,.xls,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
+          </div>
+          <aside class="clue-tip">模板根据任务类型区分：1、主体监测（仅针对平台内经营者主体）；2、违法违规类型。使用错误的模板导入将提示导入失败。<br><br>点击「提交」才会将最终结果导入数据库中。<br>如果是主体监测，后台需要处理两件事：<br>1、判断是否有新主体，若是新主体则自动增加到主体库中，并且新增/删除记录中也有相关记载，操作人为该用户。<br>2、库中已存在的主体，业务子库的字段增加「子库标签」中的内容。<br>如果是违法违规行为监测，则需要将有效线索添加到申请人的待处理列表。</aside>
+        </div>
+        <div class="actions center">
+          <a class="btn-ghost" href="${page("special.html")}">返回</a>
+          <button type="button" class="btn-primary" onclick="submitImport()">提交</button>
+        </div>
+      </section>
+    ` : `<section class="card"><p class="empty">未找到该任务</p><div class="actions"><a class="btn-ghost" href="${page("special.html")}">返回</a></div></section>`;
+
+    document.getElementById("app").innerHTML = shellStart() + body + shellEnd();
+    document.getElementById("crumb").textContent = t ? "专项监测 / 查询 / 导入结果" : "专项监测 / 查询";
+
+    let fileName = "";
+    function paintZone() {
+      const zone = document.getElementById("zone");
+      if (!zone) return;
+      if (!fileName) {
+        zone.innerHTML = `
+          <i class="fa-solid fa-cloud-arrow-up cloud"></i>
+          <button type="button" class="btn-primary" onclick="pickFile()">上传文件</button>
+          <div class="hint">只能上传xlsx/xls文件，且不超过10MB</div>`;
+        return;
+      }
+      zone.innerHTML = `
+        <i class="fa-regular fa-file-excel cloud"></i>
+        <div class="file-name">${fileName}</div>
+        <button type="button" class="btn-ghost" onclick="pickFile()">重新上传</button>
+        <div class="parse">共识别：200条有效数据、8条无效数据、10条新主体<br>无效数据：第2、3、7、10、50、55、77、89行<br>以上为识别结果，若确认导入请点击「提交」</div>`;
+    }
+    function pickFile() {
+      document.getElementById("file").click();
+    }
+    function onFile() {
+      const input = document.getElementById("file");
+      const f = input.files && input.files[0];
+      if (!f) return;
+      const ok = /\.xlsx?$/i.test(f.name);
+      if (!ok) {
+        input.value = "";
+        return toast("只能上传xlsx/xls文件");
+      }
+      if (f.size > 10 * 1024 * 1024) {
+        input.value = "";
+        return toast("文件不能超过10MB");
+      }
+      fileName = f.name;
+      paintZone();
+    }
+    function submitImport() {
+      if (!t) return;
+      if (t.done === "是") return toast("已完成任务不能导入结果");
+      if (!fileName) return toast("请先上传文件");
+      if (!confirm("确认将识别结果导入数据库？")) return;
+      patchRow("specialApplies", t.id, { imported: true, importFile: fileName });
+      toast("已提交导入");
+      location.href = page("special.html");
+    }
+    window.pickFile = pickFile;
+    window.submitImport = submitImport;
+    const fileEl = document.getElementById("file");
+    if (fileEl) fileEl.addEventListener("change", onFile);
+    paintZone();
+  </script>
+</body>
+</html>

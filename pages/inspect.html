@@ -1,0 +1,407 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>任务派发 · 网监分级分类</title>
+  <link rel="stylesheet" href="../assets/vendor/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="../assets/app.css?v=33">
+</head>
+<body>
+  <div class="app" id="app"></div>
+  <script src="../assets/common.js?v=41"></script>
+  <script>
+    const ME = "李监管";
+    const TYPES = ["分级分类定向检查", "专项定向检查"];
+    const STATS = ["已完成", "未完成"];
+    function opt(list) {
+      return `<option value="">全部</option>` + list.map((x) => `<option>${x}</option>`).join("");
+    }
+    function fld(id, label, html) {
+      return `<div class="flt-item"><label>${label}</label>${html}</div>`;
+    }
+    function v(id) {
+      const el = document.getElementById(id);
+      return el ? (el.value || "").trim() : "";
+    }
+    function canEdit(p) {
+      return p.mine !== false && p.status !== "已完成";
+    }
+    function orgOpts(empty) {
+      return `<option value="">${empty || "全部"}</option>` + DISPATCH_ORGS.map((x) => `<option>${x}</option>`).join("");
+    }
+
+    document.getElementById("app").innerHTML = shellStart() + `
+      <section class="card">
+        <h2>任务派发</h2>
+        <p class="sub">可查看本级及下级的派发任务。对下级派发的任务仅支持查看（含任务详情）。本期不设置优先级。抽取时自动跳过抽查白名单内网店（当前 ${whitelistActive().length} 户，按抽中日起半年后自动移出）。</p>
+        <div class="flt-grid">
+          ${fld("q-type", "任务类型", `<select id="q-type">${opt(TYPES)}</select>`)}
+          ${fld("q-name", "任务名称", `<input id="q-name" autocomplete="off">`)}
+          ${fld("q-st", "状态", `<select id="q-st">${opt(STATS)}</select>`)}
+          ${fld("q-org", "派发机构", `<select id="q-org">${orgOpts("全部")}</select>`)}
+          ${fld("q-owner", "派发人", `<input id="q-owner" autocomplete="off">`)}
+          <div class="flt-item">
+            <label>派发时间</label>
+            <div class="date-range">
+              <input id="q-from" type="date">
+              <input id="q-to" type="date">
+            </div>
+          </div>
+        </div>
+        <div class="flt-actions">
+          <button type="button" class="btn-danger" onclick="delSelected()">${antIco("delete", "删除")}</button>
+          <button type="button" class="btn-ghost" onclick="clearQ()">${antIco("clear", "清空")}</button>
+          <button type="button" class="btn-primary" onclick="paint()">${antIco("search", "查询")}</button>
+        </div>
+        <div class="sub-bar">
+          <div></div>
+          <div class="sub-bar-ops">
+            <button type="button" class="btn-primary" onclick="openNew()">${antIco("plus", "新增检查任务")}</button>
+          </div>
+        </div>
+        <div class="table-wrap"><table class="wide-tbl">
+          <thead><tr>
+            <th style="width:36px"><input type="checkbox" id="check-all" onclick="toggleAll(this.checked)"></th>
+            <th>序号</th><th>任务类型</th><th>任务名称</th><th>任务说明</th><th>任务时间</th>
+            <th>派发人</th><th>派发机构</th><th>派发时间</th><th>抽检主体数/已完成数</th><th>状态</th><th>操作</th>
+          </tr></thead>
+          <tbody id="tbody"></tbody>
+        </table></div>
+      </section>
+    ` + shellEnd();
+    document.getElementById("crumb").textContent = "检查任务管理 / 任务派发";
+    const pageEl = document.querySelector(".page");
+    if (pageEl) pageEl.classList.add("wide");
+
+    function asDay(s) {
+      return (s || "").replace(/\./g, "-").slice(0, 10);
+    }
+    function paint() {
+      const rows = packs()
+        .filter((p) => p.status !== "已删除")
+        .filter((p) => !v("q-type") || p.type === v("q-type"))
+        .filter((p) => !v("q-name") || (p.name || "").includes(v("q-name")))
+        .filter((p) => !v("q-st") || p.status === v("q-st"))
+        .filter((p) => !v("q-org") || p.dispatchTo === v("q-org"))
+        .filter((p) => !v("q-owner") || (p.owner || "").includes(v("q-owner")))
+        .filter((p) => {
+          const d = asDay(p.dispatched);
+          if (v("q-from") && d && d < v("q-from")) return false;
+          if (v("q-to") && d && d > v("q-to")) return false;
+          return true;
+        });
+      document.getElementById("tbody").innerHTML = rows.map((p, i) => {
+        const ops = [`<a href="${page("inspect-pack.html")}?id=${p.id}">查看</a>`];
+        if (canEdit(p)) {
+          ops.push(`<a href="javascript:void(0)" onclick="openEdit('${p.id}')">修改</a>`);
+          if ((p.done || 0) === 0) ops.push(`<a href="javascript:void(0)" onclick="delOne('${p.id}')">删除</a>`);
+        }
+        if (p.status === "已完成" || p.mine === false) {
+          ops.length = 1;
+        }
+        return `<tr>
+          <td><input type="checkbox" class="row-check" value="${p.id}"></td>
+          <td>${i + 1}</td>
+          <td>${p.type || "—"}</td>
+          <td><a class="linkish" href="${page("inspect-pack.html")}?id=${p.id}">${p.name}</a></td>
+          <td>${p.desc || p.note || "—"}</td>
+          <td>${p.time}</td>
+          <td>${p.owner || "—"}</td>
+          <td>${p.dispatchTo || "—"}</td>
+          <td>${p.dispatched || "—"}</td>
+          <td>${p.total || 0} / ${p.done || 0}</td>
+          <td>${statusChip(p.status)}</td>
+          <td class="tbl-ops">${ops.join(" ")}</td>
+        </tr>`;
+      }).join("") || `<tr><td colspan="12" class="empty">无匹配任务</td></tr>`;
+    }
+    function clearQ() {
+      document.querySelectorAll(".flt-grid input, .flt-grid select").forEach((el) => { el.value = ""; });
+      paint();
+    }
+    function toggleAll(on) {
+      document.querySelectorAll(".row-check").forEach((el) => { el.checked = on; });
+    }
+    function selectedIds() {
+      return [...document.querySelectorAll(".row-check:checked")].map((el) => el.value);
+    }
+    function delOne(id) {
+      const p = packOf(id);
+      if (!p || !canEdit(p)) return toast("下级任务或不允许删除的任务，仅支持查看");
+      if (!confirm("确认删除该任务？")) return;
+      patchRow("packs", id, { status: "已删除", name: p.name });
+      toast("已删除");
+      paint();
+    }
+    function delSelected() {
+      const ids = selectedIds();
+      if (!ids.length) return toast("请先勾选任务");
+      const ok = ids.map(packOf).filter((p) => p && canEdit(p));
+      if (!ok.length) return toast("所选任务不可删除（已完成或下级任务仅可查看）");
+      if (!confirm("确认删除所选任务？")) return;
+      ok.forEach((p) => patchRow("packs", p.id, { status: "已删除" }));
+      toast("已删除");
+      paint();
+    }
+    const SUBJ_KINDS = ["平台内经营者"];
+    const DEF_CHECKS = ["是否属于本市场所管辖", "网址是否有效", "营业执照是否合规", "许可(备案)是否合规"];
+    const ATTR_OPTS = ["业务子库", "经营许可类别"];
+    const ATTR_VALS = {
+      "业务子库": ["食品生产", "食品经营", "化妆品", "保健食品"],
+      "经营许可类别": ["食品生产", "预包装食品", "化妆品经营"],
+    };
+    const ATTR_COUNT = { "食品生产": 2310, "食品经营": 1860, "化妆品": 980, "保健食品": 640, "预包装食品": 1200, "化妆品经营": 540 };
+    function poolOf() {
+      return { A: 200, B: 200, C: 200, D: 200 };
+    }
+    function numPct(id, fallback) {
+      const n = Number(v(id));
+      return Number.isFinite(n) ? n : fallback;
+    }
+    function expectN(total, pct) {
+      return Math.round((Number(total) || 0) * (Number(pct) || 0) / 100);
+    }
+    function attrCount(val) {
+      return ATTR_COUNT[val] || 800;
+    }
+    function splitTime(t) {
+      const m = String(t || "").match(/(\d{4})[.\-](\d{1,2})[.\-](\d{1,2}).*?(\d{4})[.\-](\d{1,2})[.\-](\d{1,2})/);
+      if (!m) return ["", ""];
+      const pad = (x) => String(x).padStart(2, "0");
+      return [`${m[1]}-${pad(m[2])}-${pad(m[3])}`, `${m[4]}-${pad(m[5])}-${pad(m[6])}`];
+    }
+    function captureKind() {
+      const d = window.__inspDraft;
+      if (!d) return;
+      if (document.getElementById("n-subj")) d.subjKind = v("n-subj");
+      ["A", "B", "C", "D"].forEach((lv) => {
+        if (document.getElementById("n-r" + lv)) d.ratios[lv] = numPct("n-r" + lv, d.ratios[lv]);
+      });
+      if (document.getElementById("n-attr")) d.attr = v("n-attr");
+      if (document.getElementById("n-attr-val")) d.attrVal = v("n-attr-val");
+      if (document.getElementById("n-spec-r")) d.specRatio = numPct("n-spec-r", d.specRatio);
+      d.defChecks = DEF_CHECKS.slice();
+    }
+    function paintKind() {
+      captureKind();
+      const type = v("n-type") || "分级分类定向检查";
+      const box = document.getElementById("kind-fields");
+      const d = window.__inspDraft;
+      if (!box || !d) return;
+      const subjOpts = SUBJ_KINDS.map((x) => `<option selected>${x}</option>`).join("");
+      const pool = poolOf();
+      if (type === "专项定向检查") {
+        const vals = ATTR_VALS[d.attr] || ATTR_VALS["业务子库"];
+        if (vals.indexOf(d.attrVal) < 0) d.attrVal = vals[0];
+        const cnt = attrCount(d.attrVal);
+        const draw = expectN(cnt, d.specRatio);
+        const attrOpts = ATTR_OPTS.map((x) => `<option ${x === d.attr ? "selected" : ""}>${x}</option>`).join("");
+        const valOpts = vals.map((x) => `<option ${x === d.attrVal ? "selected" : ""}>${x}</option>`).join("");
+        const defs = DEF_CHECKS.map((name) => (
+          `<label class="def"><input type="checkbox" checked disabled>${name}</label>`
+        )).join("");
+        const extras = (d.extraChecks || []).map((name, i) => (
+          `<label><input type="checkbox" checked> ${name} <button type="button" onclick="rmCheckItem(${i})" title="删除"><i class="fa-solid fa-circle-minus"></i></button></label>`
+        )).join("");
+        box.innerHTML = `
+          <div class="kv span">
+            <div class="k"><span class="req">*</span>检查主体类型</div>
+            <div class="v"><select id="n-subj">${subjOpts}</select></div>
+          </div>
+          <div class="kv span">
+            <div class="k"><span class="req">*</span>抽取属性</div>
+            <div class="v"><select id="n-attr" onchange="onAttrChange()">${attrOpts}</select></div>
+          </div>
+          <div class="kv span">
+            <div class="k"><span class="req">*</span>属性内容</div>
+            <div class="v"><div class="attr-line"><select id="n-attr-val" onchange="syncSpecRatio()">${valOpts}</select><span class="fore" id="n-attr-cnt">${cnt}条主体</span></div></div>
+          </div>
+          <div class="kv span">
+            <div class="k"><span class="req">*</span>主体抽取比例</div>
+            <div class="v"><div class="ratio-lv"><input id="n-spec-r" value="${d.specRatio}" oninput="syncSpecRatio()"><span class="unit">%</span><span class="fore" id="n-spec-fore">预计抽取${draw}条主体</span></div></div>
+          </div>
+          <div class="kv span">
+            <div class="k"><span class="req">*</span>配置检查项</div>
+            <div class="v"><div class="check-cfg">
+              <div class="defs">${defs}<span class="tip">默认检查项</span></div>
+              <div class="extras" id="n-extras">${extras}</div>
+              <div class="add-row"><button type="button" class="btn-primary" onclick="addCheckItem()">新增检查项</button></div>
+            </div></div>
+          </div>`;
+      } else {
+        const rows = ["A", "B", "C", "D"].map((lv) => {
+          const n = pool[lv];
+          const pct = d.ratios[lv];
+          return `<div class="ratio-lv"><span class="lv">${lv}级（共${n}条）</span><input id="n-r${lv}" value="${pct}" oninput="syncGradeRatio()"><span class="unit">%</span><span class="fore" id="n-fore-${lv}">预计抽取${expectN(n, pct)}条主体</span></div>`;
+        }).join("");
+        box.innerHTML = `
+          <div class="kv span">
+            <div class="k"><span class="req">*</span>检查主体类型</div>
+            <div class="v"><select id="n-subj">${subjOpts}</select></div>
+          </div>
+          <div class="kv span">
+            <div class="k"><span class="req">*</span>主体抽检比例</div>
+            <div class="v">${rows}</div>
+          </div>`;
+      }
+    }
+    function onAttrChange() {
+      const d = window.__inspDraft;
+      d.attr = v("n-attr");
+      const vals = ATTR_VALS[d.attr] || ATTR_VALS["业务子库"];
+      d.attrVal = vals[0];
+      paintKind();
+    }
+    function syncGradeRatio() {
+      const d = window.__inspDraft;
+      const pool = poolOf();
+      ["A", "B", "C", "D"].forEach((lv) => {
+        const pct = numPct("n-r" + lv, d.ratios[lv]);
+        d.ratios[lv] = pct;
+        const el = document.getElementById("n-fore-" + lv);
+        if (el) el.textContent = "预计抽取" + expectN(pool[lv], pct) + "条主体";
+      });
+    }
+    function syncSpecRatio() {
+      const d = window.__inspDraft;
+      d.attrVal = v("n-attr-val") || d.attrVal;
+      d.specRatio = numPct("n-spec-r", d.specRatio);
+      const cnt = attrCount(d.attrVal);
+      const cntEl = document.getElementById("n-attr-cnt");
+      const fore = document.getElementById("n-spec-fore");
+      if (cntEl) cntEl.textContent = cnt + "条主体";
+      if (fore) fore.textContent = "预计抽取" + expectN(cnt, d.specRatio) + "条主体";
+    }
+    function addCheckItem() {
+      const name = (prompt("请输入检查项名称") || "").trim();
+      if (!name) return;
+      window.__inspDraft.extraChecks.push(name);
+      paintKind();
+    }
+    function rmCheckItem(i) {
+      window.__inspDraft.extraChecks.splice(i, 1);
+      paintKind();
+    }
+    function expectedTotal(type, d) {
+      if (type === "专项定向检查") return expectN(attrCount(d.attrVal), d.specRatio);
+      const pool = poolOf();
+      return ["A", "B", "C", "D"].reduce((sum, lv) => sum + expectN(pool[lv], d.ratios[lv]), 0);
+    }
+    function formModal(title, p) {
+      const type = (p && p.type) || "分级分类定向检查";
+      const typeOpts = TYPES.map((x) => `<option ${x === type ? "selected" : ""}>${x}</option>`).join("");
+      window.__inspDraft = {
+        subjKind: "平台内经营者",
+        ratios: Object.assign({ A: 10, B: 10, C: 10, D: 10 }, (p && p.ratios) || {}),
+        attr: (p && p.attr) || "业务子库",
+        attrVal: (p && p.attrVal) || "食品生产",
+        specRatio: p && p.specRatio != null ? p.specRatio : 10,
+        extraChecks: (p && p.extraChecks && p.extraChecks.slice()) || ["是否经营茶叶", "是否经营大米"],
+        defChecks: (p && p.defChecks && p.defChecks.slice()) || DEF_CHECKS.slice(),
+      };
+      openModal(`
+        <div class="modal adj insp-new">
+          <div class="adj-h">
+            <h3>${title}</h3>
+            <button type="button" class="icon-btn" onclick="closeModal()"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+          <div class="adj-body">
+            <div class="kv-form">
+              <div class="kv span">
+                <div class="k"><span class="req">*</span>任务类型</div>
+                <div class="v"><select id="n-type" onchange="paintKind()">${typeOpts}</select></div>
+              </div>
+              <div class="kv span">
+                <div class="k"><span class="req">*</span>任务名称</div>
+                <div class="v"><input id="n-name" value="${p ? p.name : ""}" placeholder="请输入"></div>
+              </div>
+              <div class="kv span">
+                <div class="k"><span class="req">*</span>任务说明</div>
+                <div class="v"><textarea id="n-desc" placeholder="请输入">${p ? (p.desc || "") : ""}</textarea></div>
+              </div>
+              <div id="kind-fields"></div>
+              <div class="kv span">
+                <div class="k"><span class="req">*</span>任务时间</div>
+                <div class="v"><div class="date-range"><input id="n-from" type="date" title="开始时间"><span class="sep">至</span><input id="n-to" type="date" title="截止时间"></div></div>
+              </div>
+            </div>
+          </div>
+          <div class="adj-foot">
+            <button type="button" class="btn-ghost" onclick="closeModal()">关闭</button>
+            <button type="button" class="btn-primary" onclick="saveForm('${p ? p.id : ""}')">提交</button>
+          </div>
+        </div>`);
+      paintKind();
+      if (p && p.time) {
+        const t = splitTime(p.time);
+        const from = document.getElementById("n-from");
+        const to = document.getElementById("n-to");
+        if (from) from.value = t[0];
+        if (to) to.value = t[1];
+      }
+    }
+    function openNew() { formModal("新增任务", null); }
+    function openEdit(id) {
+      const p = packOf(id);
+      if (!p || !canEdit(p)) return toast("该任务仅支持查看");
+      formModal("修改任务", p);
+    }
+    function saveForm(id) {
+      captureKind();
+      const type = v("n-type");
+      const d = window.__inspDraft;
+      if (!type || !v("n-name") || !v("n-desc") || !v("n-from") || !v("n-to") || !d.subjKind) {
+        return toast("请填写必填项");
+      }
+      const time = v("n-from").replace(/-/g, ".") + "-" + v("n-to").replace(/-/g, ".");
+      const extra = {
+        type, name: v("n-name"), desc: v("n-desc"), time, mine: true,
+        subjKind: d.subjKind, ratios: { ...d.ratios },
+        attr: d.attr, attrVal: d.attrVal, specRatio: d.specRatio,
+        extraChecks: d.extraChecks.slice(), defChecks: DEF_CHECKS.slice(),
+        total: expectedTotal(type, d),
+      };
+      const s = loadState();
+      s.packs = s.packs || {};
+      let pid = id;
+      if (id) {
+        const p = packOf(id);
+        s.packs[id] = { ...p, ...extra };
+      } else {
+        pid = "P" + Date.now().toString().slice(-6);
+        s.packs[pid] = {
+          id: pid, owner: ME, creator: ME, dispatchTo: "", dispatched: "",
+          done: 0, status: "未完成", ...extra,
+        };
+      }
+      saveState({ packs: s.packs });
+      if (!id) {
+        const pack = s.packs[pid];
+        const skip = new Set(whitelistActive().map((w) => w.key));
+        const pool = subjects().filter((x) => x.type === "seller" && !skip.has(shopWhiteKey(x)));
+        const n = Math.min(2, pool.length, pack.total || 2);
+        addShopsToWhitelist(pool.slice(0, n), pack);
+      }
+      closeModal();
+      toast(id ? "已保存" : "已新增检查任务，抽中网店已入白名单");
+      paint();
+    }
+    window.paint = paint;
+    window.clearQ = clearQ;
+    window.toggleAll = toggleAll;
+    window.delSelected = delSelected;
+    window.delOne = delOne;
+    window.openNew = openNew;
+    window.openEdit = openEdit;
+    window.saveForm = saveForm;
+    window.paintKind = paintKind;
+    window.onAttrChange = onAttrChange;
+    window.syncGradeRatio = syncGradeRatio;
+    window.syncSpecRatio = syncSpecRatio;
+    window.addCheckItem = addCheckItem;
+    window.rmCheckItem = rmCheckItem;
+    paint();
+  </script>
+</body>
+</html>

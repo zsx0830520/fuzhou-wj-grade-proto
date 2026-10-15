@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>专项监测 · 福州网监直播采集</title>
+  <link rel="stylesheet" href="../../assets/vendor/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="../assets/app.css?v=4">
+</head>
+<body>
+  <div class="app" id="app"></div>
+  <script src="../assets/common.js?v=3"></script>
+  <script>
+    document.getElementById("app").innerHTML = shellStart("special") + `
+      <div id="storage-slot"></div>
+      <section class="card">
+        <div class="row-between" style="align-items:flex-start;margin-bottom:12px">
+          <div>
+            <h2>专项监测任务</h2>
+            <p class="sub">指定若干直播间，按日期区间、每隔 N 小时进入采集。切片规则同常规监测（开播采 5 分钟）。</p>
+          </div>
+          <button class="btn-primary" onclick="openCreate()"><i class="fa-solid fa-plus"></i> 新建专项任务</button>
+        </div>
+        <div class="table-wrap"><table>
+          <thead><tr>
+            <th>任务</th><th>监测日期</th><th>频率</th><th>直播间</th><th>状态</th><th>线索</th><th></th>
+          </tr></thead>
+          <tbody id="tbody"></tbody>
+        </table></div>
+      </section>
+    ` + shellEnd();
+    document.getElementById("crumb").textContent = "专项监测";
+    document.getElementById("storage-slot").innerHTML = storageBar();
+
+    function clueCountFor(task) {
+      return getCluesMerged().filter(c => task.roomIds.includes(c.roomId)).length;
+    }
+    function render() {
+      const tasks = getTasks();
+      document.getElementById("tbody").innerHTML = tasks.map(t => `
+        <tr>
+          <td><a class="linkish" href="special-detail.html?id=${t.id}">${t.name}</a><div class="muted">${t.note || ""}</div></td>
+          <td>${t.start} 至 ${t.end}</td>
+          <td>每 ${t.freq} 小时</td>
+          <td>${t.roomIds.map(id => getRoom(id)?.name).filter(Boolean).join("、")}</td>
+          <td>${t.status === "监测中" ? '<span class="chip chip-ok">监测中</span>' : '<span class="chip chip-wait">已结束</span>'}</td>
+          <td>${clueCountFor(t) || "—"}</td>
+          <td><a class="btn-ghost btn" href="special-detail.html?id=${t.id}">查看</a></td>
+        </tr>`).join("");
+    }
+    function openCreate() {
+      window.__pickedRooms = new Set();
+      openModal(`
+        <div class="modal">
+          <div class="modal-h">
+            <div><h3>新建专项任务</h3><p>监测时间按日期选择；频率单位为小时。</p></div>
+            <button class="icon-btn" onclick="closeModal()"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+          <div class="form-grid" style="margin-top:14px">
+            <div class="field" style="grid-column:1/-1"><label>任务名称</label><input id="t-name" placeholder="例如：化妆品绝对化用语专项"></div>
+            <div class="field"><label>开始日期</label><input id="t-start" type="date" value="2026-09-08"></div>
+            <div class="field"><label>结束日期</label><input id="t-end" type="date" value="2026-09-30"></div>
+            <div class="field"><label>监测频率（小时）</label><input id="t-freq" type="number" min="1" value="2"></div>
+            <div class="field"><label>备注</label><input id="t-note" placeholder="可选"></div>
+            <div class="field" style="grid-column:1/-1">
+              <label>挂接直播间（可多选）</label>
+              <div class="picked-box" id="picked-box"></div>
+              <div class="room-flt">
+                <input class="search" id="room-kw" placeholder="检索直播间名称 / 平台 / 主体" oninput="renderRoomPick()">
+                <select id="room-tag" onchange="renderRoomPick()">
+                  <option value="">业务子库 全部</option>
+                  <option>食品</option>
+                  <option>化妆品</option>
+                  <option>保健食品</option>
+                  <option>食用农产品</option>
+                  <option>日用百货</option>
+                  <option>家电</option>
+                  <option>服装</option>
+                  <option>建材</option>
+                </select>
+                <select id="room-permit" onchange="renderRoomPick()">
+                  <option value="">经营许可类别 全部</option>
+                  <option>食品生产</option>
+                  <option>食品经营</option>
+                  <option>化妆品经营</option>
+                  <option>其他</option>
+                </select>
+                <button type="button" class="btn-primary" onclick="askAddSubject()">新增主体</button>
+              </div>
+              <div class="room-pick" id="room-pick"></div>
+            </div>
+          </div>
+          <div class="modal-f">
+            <span class="muted">已选项固定展示在上方，检索不影响已勾选结果</span>
+            <button class="btn-primary" onclick="createTask()">创建任务</button>
+          </div>
+        </div>`);
+      renderRoomPick();
+    }
+    window.askAddSubject = function askAddSubject() {
+      if (!confirm("检索列表没有目标直播间时，可前往「直播间运营者」主体库新增。是否跳转？")) return;
+      const target = "subjects.html?type=live&add=1";
+      if (window.parent && window.parent !== window) {
+        window.parent.location.href = target;
+      } else {
+        location.href = "../../pages/" + target;
+      }
+    }
+    function pickedIds() {
+      return window.__pickedRooms || new Set();
+    }
+    function toggleRoom(id, checked) {
+      if (checked) pickedIds().add(id);
+      else pickedIds().delete(id);
+      renderRoomPick();
+    }
+    function removeRoom(id) {
+      pickedIds().delete(id);
+      renderRoomPick();
+    }
+    function renderRoomPick() {
+      const box = document.getElementById("picked-box");
+      const list = document.getElementById("room-pick");
+      if (!box || !list) return;
+      const selected = [...pickedIds()].map(getRoom).filter(Boolean);
+      box.innerHTML = selected.length
+        ? selected.map(r => `<span class="picked-chip">${r.name}<button type="button" onclick="removeRoom('${r.id}')" title="移除">×</button></span>`).join("")
+        : `<span class="picked-empty">尚未选择。检索后勾选，已选直播间会留在此处。</span>`;
+      const kw = (document.getElementById("room-kw")?.value || "").trim();
+      const tag = (document.getElementById("room-tag")?.value || "").trim();
+      const permit = (document.getElementById("room-permit")?.value || "").trim();
+      const rows = ROOMS.filter((r) => {
+        if (kw && ![r.name, r.platform, r.subject, r.credit, r.area, r.tag, r.permit].join("").includes(kw)) return false;
+        if (tag && r.tag !== tag) return false;
+        if (permit && r.permit !== permit) return false;
+        return true;
+      });
+      list.innerHTML = rows.length
+        ? rows.map(r => `<label><input type="checkbox" value="${r.id}" ${pickedIds().has(r.id) ? "checked" : ""} onchange="toggleRoom('${r.id}', this.checked)"> ${r.name} · ${r.platform} · ${r.subject}</label>`).join("")
+        : `<div class="empty" style="padding:16px">没有匹配的直播间</div>`;
+    }
+    function createTask() {
+      const name = document.getElementById("t-name").value.trim();
+      const start = document.getElementById("t-start").value;
+      const end = document.getElementById("t-end").value;
+      const freq = Number(document.getElementById("t-freq").value);
+      const note = document.getElementById("t-note").value.trim();
+      const roomIds = [...pickedIds()];
+      if (!name) return toast("请填写任务名称");
+      if (!start || !end) return toast("请选择监测日期");
+      if (!freq || freq < 1) return toast("频率至少为 1 小时");
+      if (!roomIds.length) return toast("请至少选择一个直播间");
+      const tasks = getTasks();
+      tasks.unshift({ id: "T" + Date.now(), name, start, end, freq, roomIds, status: "监测中", note });
+      setTasks(tasks);
+      closeModal();
+      toast("专项任务已创建");
+      render();
+    }
+    render();
+  </script>
+</body>
+</html>

@@ -1,0 +1,191 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>分类结果 · 网监分级分类</title>
+  <link rel="stylesheet" href="assets/vendor/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="assets/app.css?v=33">
+</head>
+<body>
+  <div class="app" id="app"></div>
+  <script src="assets/common.js?v=41"></script>
+  <script>
+    const type = qs("type") || "platform";
+    const titles = { platform: "电商平台", seller: "平台内经营者", live: "直播间运营者" };
+    const FORMAT = ["食品", "工业用品", "电子产品", "化妆品"];
+    const ORG = ["福州市市场监督管理局", "鼓楼区市场监督管理局", "台江区市场监督管理局", "仓山区市场监督管理局"];
+    const BIZ = ["网络零售", "批发", "跨境电商"];
+    const TAG = type === "live" ? ["头部主播", "腰部主播"] : ["交易型", "非交易型"];
+    const SRC = ["自动采集", "人工录入"];
+    const CARRIER = ["网站", "APP", "平台内店铺"];
+    const PLAT = ["抖音", "快手", "淘宝直播"];
+
+    function opt(list) {
+      return `<option value="">全部</option>` + list.map((x) => `<option>${x}</option>`).join("");
+    }
+    function fld(id, label, html) {
+      return `<div class="flt-item"><label>${label}</label>${html}</div>`;
+    }
+    function inp(id) { return `<input id="${id}" autocomplete="off">`; }
+    function sel(id, list) { return `<select id="${id}">${opt(list)}</select>`; }
+    function lvSel(id) { return `<select id="${id}">${opt(["A","B","C","D"])}</select>`; }
+    function ynSel(id) { return `<select id="${id}">${opt(["是","否"])}</select>`; }
+
+    const platformFilter = `
+      ${fld("q-carrier", "网络载体", inp("q-carrier"))}
+      ${fld("q-domain", "域名链接", inp("q-domain"))}
+      ${fld("q-format", "主营业态", sel("q-format", FORMAT))}
+      ${fld("q-name", "主体名称", inp("q-name"))}
+      ${fld("q-company", "公司名称", inp("q-company"))}
+      ${fld("q-credit", "统一社会信用代码", inp("q-credit"))}
+      ${fld("q-org", "登记机关", sel("q-org", ORG))}
+      ${fld("q-addr", "公司地址", inp("q-addr"))}
+      ${fld("q-biz", "主营业务", sel("q-biz", BIZ))}
+      ${fld("q-lv", "分类等级", lvSel("q-lv"))}
+      ${fld("q-tag", "主体标签", sel("q-tag", TAG))}
+      ${fld("q-src", "数据来源", sel("q-src", SRC))}
+      ${fld("q-manual", "是否人工调级", ynSel("q-manual"))}`;
+
+    const liveFilter = `
+      ${fld("q-liveId", "ID", inp("q-liveId"))}
+      ${fld("q-name", "主播名称", inp("q-name"))}
+      ${fld("q-shop", "关联店铺", inp("q-shop"))}
+      ${fld("q-credit", "统一社会信用代码", inp("q-credit"))}
+      ${fld("q-org", "监管单位", sel("q-org", ORG))}
+      ${fld("q-mcn", "所属MCN机构", inp("q-mcn"))}
+      ${fld("q-plat", "主要直播平台", sel("q-plat", PLAT))}
+      ${fld("q-lv", "分类等级", lvSel("q-lv"))}
+      ${fld("q-tag", "主体标签", sel("q-tag", TAG))}
+      ${fld("q-manual", "是否人工调级", ynSel("q-manual"))}`;
+
+    const platformHead = `<tr>
+      <th>序号</th><th>主体名称</th><th>统一社会信用代码</th><th>公司名称</th>
+      <th>主营业态</th><th>主营业务</th><th>网络载体</th><th>域名链接</th>
+      <th>登记机关</th><th>公司地址</th><th>分类等级</th><th>是否人工调级</th>
+      <th>主体标签</th><th>数据来源</th><th>操作</th>
+    </tr>`;
+    const liveHead = `<tr>
+      <th>序号</th><th>ID</th><th>主播名称</th><th>关联店铺</th><th>所属MCN机构</th>
+      <th>统一社会信用代码</th><th>粉丝数量</th><th>主要直播平台</th>
+      <th>分类等级</th><th>是否人工调级</th><th>主体标签</th><th>监管单位</th><th>操作</th>
+    </tr>`;
+
+    document.getElementById("app").innerHTML = shellStart() + `
+      <div id="stats"></div>
+      <section class="card">
+        <h2>${titles[type] || "分级分类结果"}</h2>
+        <p class="sub">本页只展示该主体类型的评定结果。模型请到左侧「分级分类模型管理」维护。</p>
+        <div class="flt-grid">${type === "live" ? liveFilter : platformFilter}</div>
+        <div class="flt-actions">
+          <button type="button" class="btn-ghost" onclick="clearQ()">${antIco("clear", "清空")}</button>
+          <button type="button" class="btn-primary" onclick="paint()">${antIco("search", "查询")}</button>
+        </div>
+        <p class="spec">点击「调级」时，若已有未完结申请，提示「已有调级申请，请勿重复操作」。调级选项不含当前等级；人工调级成功后不再参与系统评定。</p>
+        <div class="table-wrap"><table class="wide-tbl">
+          <thead>${type === "live" ? liveHead : platformHead}</thead>
+          <tbody id="tbody"></tbody>
+        </table></div>
+      </section>
+    ` + shellEnd();
+    document.getElementById("crumb").textContent = "分级分类结果 / " + (titles[type] || "");
+    document.getElementById("stats").innerHTML = statsBar(type);
+    const pageEl = document.querySelector(".page");
+    if (pageEl) pageEl.classList.add("wide");
+
+    function v(id) {
+      const el = document.getElementById(id);
+      return el ? (el.value || "").trim() : "";
+    }
+    function hit(row, id, key) {
+      const q = v(id);
+      if (!q) return true;
+      return String(row[key] || "").includes(q);
+    }
+    function ops(r) {
+      return `<td class="tbl-ops">
+        <a href="javascript:void(0)" onclick="openJudgeView('${r.id}')">查看</a>
+        <a href="javascript:void(0)" onclick="openAdjustById('${r.id}')">调级</a>
+      </td>`;
+    }
+
+    function platformRow(r, i) {
+      return `<tr>
+        <td>${i + 1}</td>
+        <td><a class="linkish" href="${page("result-detail.html")}?id=${r.id}">${r.name}</a></td>
+        <td>${r.credit}</td>
+        <td>${r.company || "—"}</td>
+        <td>${r.format || "—"}</td>
+        <td>${r.biz || "—"}</td>
+        <td>${r.carrier || "—"}</td>
+        <td>${r.domain || "—"}</td>
+        <td>${r.org || "—"}</td>
+        <td>${r.address || "—"}</td>
+        <td>${levelChip(r.level)}${r.pending ? ' <span class="chip chip-wait">调级中</span>' : ""}</td>
+        <td>${manualFlag(r)}</td>
+        <td>${r.tag || "—"}</td>
+        <td>${r.source || "—"}</td>
+        ${ops(r)}
+      </tr>`;
+    }
+    function liveRow(r, i) {
+      return `<tr>
+        <td>${i + 1}</td>
+        <td>${r.liveId || "—"}</td>
+        <td><a class="linkish" href="${page("result-detail.html")}?id=${r.id}">${r.name}</a></td>
+        <td>${r.shop || "—"}</td>
+        <td>${r.mcn || "—"}</td>
+        <td>${r.credit}</td>
+        <td>${r.fans || "—"}</td>
+        <td>${r.livePlat || "—"}</td>
+        <td>${levelChip(r.level)}${r.pending ? ' <span class="chip chip-wait">调级中</span>' : ""}</td>
+        <td>${manualFlag(r)}</td>
+        <td>${r.tag || "—"}</td>
+        <td>${r.org || "—"}</td>
+        ${ops(r)}
+      </tr>`;
+    }
+
+    function paint() {
+      let rows = results().filter((r) => r.type === type);
+      if (type === "live") {
+        rows = rows
+          .filter((r) => hit(r, "q-liveId", "liveId"))
+          .filter((r) => hit(r, "q-name", "name"))
+          .filter((r) => hit(r, "q-shop", "shop"))
+          .filter((r) => hit(r, "q-credit", "credit"))
+          .filter((r) => hit(r, "q-org", "org"))
+          .filter((r) => hit(r, "q-mcn", "mcn"))
+          .filter((r) => hit(r, "q-plat", "livePlat"))
+          .filter((r) => !v("q-lv") || r.level === v("q-lv"))
+          .filter((r) => hit(r, "q-tag", "tag"))
+          .filter((r) => !v("q-manual") || manualFlag(r) === v("q-manual"));
+      } else {
+        rows = rows
+          .filter((r) => hit(r, "q-carrier", "carrier"))
+          .filter((r) => hit(r, "q-domain", "domain"))
+          .filter((r) => hit(r, "q-format", "format"))
+          .filter((r) => hit(r, "q-name", "name"))
+          .filter((r) => hit(r, "q-company", "company"))
+          .filter((r) => hit(r, "q-credit", "credit"))
+          .filter((r) => hit(r, "q-org", "org"))
+          .filter((r) => hit(r, "q-addr", "address"))
+          .filter((r) => hit(r, "q-biz", "biz"))
+          .filter((r) => !v("q-lv") || r.level === v("q-lv"))
+          .filter((r) => hit(r, "q-tag", "tag"))
+          .filter((r) => hit(r, "q-src", "source"))
+          .filter((r) => !v("q-manual") || manualFlag(r) === v("q-manual"));
+      }
+      const span = type === "live" ? 13 : 15;
+      document.getElementById("tbody").innerHTML = rows.map((r, i) =>
+        type === "live" ? liveRow(r, i) : platformRow(r, i)
+      ).join("") || `<tr><td colspan="${span}" class="empty">无匹配结果</td></tr>`;
+    }
+    function clearQ() {
+      document.querySelectorAll(".flt-grid input, .flt-grid select").forEach((el) => { el.value = ""; });
+      paint();
+    }
+    paint();
+  </script>
+</body>
+</html>

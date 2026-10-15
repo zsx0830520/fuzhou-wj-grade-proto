@@ -1,0 +1,103 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>分级模型 · 网监分级分类</title>
+  <link rel="stylesheet" href="../assets/vendor/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="../assets/app.css?v=33">
+</head>
+<body>
+  <div class="app" id="app"></div>
+  <script src="../assets/common.js?v=41"></script>
+  <script>
+    const type = qs("type") || "platform";
+    const titles = { platform: "电商平台", seller: "平台内经营者", live: "直播间运营者" };
+    document.getElementById("app").innerHTML = shellStart() + `
+      <section class="card">
+        <h2>${titles[type] || "分级分类模型"}</h2>
+        <div class="flt-grid">
+          <div class="flt-item"><label>模型名称</label><input id="q-name" autocomplete="off"></div>
+          <div class="flt-item"><label>创建时间</label><input id="q-date" type="date"></div>
+          <div class="flt-item"><label>创建人</label><input id="q-user" autocomplete="off"></div>
+        </div>
+        <div class="flt-actions">
+          <button type="button" class="btn-ghost" onclick="clearQ()">${antIco("clear", "清空")}</button>
+          <button type="button" class="btn-primary" onclick="paint()">${antIco("search", "查询")}</button>
+        </div>
+        <div class="actions" style="margin-top:0;margin-bottom:8px">
+          <a class="btn-primary" href="${page("model-edit.html")}?type=${type}">${antIco("plus", "新增")}</a>
+          <button type="button" class="btn-danger" onclick="batchDel()">${antIco("delete", "删除")}</button>
+        </div>
+        <p class="spec">
+          <b>操作：</b>复用进入新增页并回填该模型指标配置。修改可改内容与指标；若为当前版本使用中，提示「模型使用中，不可更改」。<br>
+          <b>删除：</b>提交前判断是否使用中；使用中同样提示「模型使用中，不可更改」，不执行删除。
+        </p>
+        <div class="table-wrap"><table>
+          <thead><tr>
+            <th style="width:36px"><input type="checkbox" id="check-all" onclick="toggleAll(this.checked)"></th>
+            <th>序号</th>
+            <th>模型名称</th>
+            <th>评定周期</th>
+            <th>创建时间</th>
+            <th>创建人</th>
+            <th>备注</th>
+            <th>操作</th>
+          </tr></thead>
+          <tbody id="tbody"></tbody>
+        </table></div>
+      </section>
+    ` + shellEnd();
+    document.getElementById("crumb").textContent = "分级分类模型管理 / " + (titles[type] || "");
+
+    function list() {
+      return models().filter(m => m.type === type && m.status !== "已删除");
+    }
+    function paint() {
+      const name = (document.getElementById("q-name").value || "").trim();
+      const date = document.getElementById("q-date").value;
+      const user = (document.getElementById("q-user").value || "").trim();
+      const rows = list()
+        .filter(m => !name || m.name.includes(name))
+        .filter(m => !date || m.created === date)
+        .filter(m => !user || m.creator.includes(user));
+      document.getElementById("tbody").innerHTML = rows.map((m, i) => {
+        const using = modelInUse(m);
+        return `<tr>
+          <td><input type="checkbox" class="row-check" value="${m.id}"></td>
+          <td>${i + 1}</td>
+          <td>${m.name}</td>
+          <td>${m.period || "—"}</td>
+          <td>${m.created || "—"}</td>
+          <td>${m.creator || "—"}</td>
+          <td>${m.remark || "—"}</td>
+          <td class="tbl-ops">
+            <a href="${page("model-edit.html")}?id=${m.id}&mode=view">查看</a>
+            ${using ? "" : `<a href="${page("model-edit.html")}?id=${m.id}&mode=edit">修改</a>`}
+            <a href="${page("model-edit.html")}?type=${type}&reuse=${m.id}">复用</a>
+          </td>
+        </tr>`;
+      }).join("") || `<tr><td colspan="8" class="empty">无匹配模型</td></tr>`;
+    }
+    function clearQ() {
+      document.getElementById("q-name").value = "";
+      document.getElementById("q-date").value = "";
+      document.getElementById("q-user").value = "";
+      paint();
+    }
+    function toggleAll(on) {
+      document.querySelectorAll(".row-check").forEach(el => { el.checked = on; });
+    }
+    function batchDel() {
+      const ids = [...document.querySelectorAll(".row-check:checked")].map(el => el.value);
+      if (!ids.length) return toast("请先勾选模型");
+      if (ids.some(id => modelInUse(modelOf(id)))) return toast("模型使用中，不可更改");
+      if (!confirm("确认删除所选模型？")) return;
+      ids.forEach(id => patchRow("models", id, { status: "已删除" }));
+      toast("已删除");
+      location.reload();
+    }
+    paint();
+  </script>
+</body>
+</html>
